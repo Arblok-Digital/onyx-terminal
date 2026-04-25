@@ -1,0 +1,161 @@
+/**
+ * @file Swap.module.css
+ * @layer panel
+ * @desc Styles for the Jupiter Swap panel: CA header strip + Jupiter
+ *       widget mount area + empty/error states.
+ */
+
+.body {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg-base);
+  font-family: var(--font-mono);
+}
+
+/* ── CA Header ────────────────────────────────────────────────────── */
+
+.caHeader {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-elevated);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.caRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.caLabel {
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  text-transform: uppercase;
+}
+
+.caAddr {
+  flex: 1;
+  font-size: 11px;
+  color: var(--accent);
+  text-decoration: none;
+  font-variant-numeric: tabular-nums;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.caAddr:hover {
+  text-decoration: underline;
+}
+
+.copyBtn {
+  width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  background: var(--bg-base);
+  color: var(--text-secondary);
+  font-size: 11px;
+  cursor: pointer;
+  transition: all var(--dur-fast) var(--ease-out);
+  flex-shrink: 0;
+}
+
+.copyBtn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+  border-color: var(--accent-dim);
+}
+
+.caMeta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  color: var(--text-secondary);
+  letter-spacing: 0.04em;
+}
+
+.metaSym {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.dot {
+  color: var(--text-muted);
+}
+
+.feeBadge {
+  margin-left: auto;
+  padding: 1px 5px;
+  background: var(--accent-dim);
+  color: var(--accent);
+  border-radius: 2px;
+  font-weight: 600;
+  font-size: 9px;
+  letter-spacing: 0.06em;
+}
+
+/* ── Jupiter mount target ─────────────────────────────────────────── */
+
+.jupTarget {
+  flex: 1;
+  min-height: 360px;
+  overflow: auto;
+  background: var(--bg-base);
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+
+.jupTarget::-webkit-scrollbar {
+  width: 6px;
+}
+
+.jupTarget::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 3px;
+}
+
+/* ── Empty / Error states ─────────────────────────────────────────── */
+
+.empty,
+.error {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 16px;
+  text-align: center;
+  gap: 8px;
+}
+
+.empty {
+  color: var(--text-muted);
+}
+
+.emptyIcon {
+  font-size: 28px;
+  opacity: 0.5;
+  color: var(--accent-dim);
+}
+
+.emptyHint {
+  font-size: 10px;
+  color: var(--text-secondary);
+}
+
+.error {
+  color: var(--red);
+  font-size: 10px;
+}

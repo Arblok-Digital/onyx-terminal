@@ -1,0 +1,285 @@
+/**
+ * @file Info.module.css
+ * @layer panel
+ * @desc Bloomberg-dense styling for the Token Info panel. Stacked sections
+ *       with thin separators, mono labels, tabular numerics.
+ */
+
+.body {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow-y: auto;
+  background: var(--bg-base);
+  font-family: var(--font-mono);
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+
+.body::-webkit-scrollbar { width: 6px; }
+.body::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 3px;
+}
+
+/* ── Section ─────────────────────────────────────────────────────── */
+
+.section {
+  border-bottom: 1px solid var(--border);
+}
+
+.sectionHeader {
+  padding: 6px 10px;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  background: var(--bg-elevated);
+}
+
+.sectionBody {
+  padding: 6px 10px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* ── Hero ────────────────────────────────────────────────────────── */
+
+.heroBox {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 0 10px;
+}
+
+.heroIcon {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--bg-active);
+  flex-shrink: 0;
+}
+
+.heroText {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.heroName {
+  font-size: 12px;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.heroSym {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  letter-spacing: 0.02em;
+}
+
+.heroPrice {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
+}
+
+/* ── Row ─────────────────────────────────────────────────────────── */
+
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11px;
+  line-height: 1.4;
+  gap: 8px;
+}
+
+.rowLabel {
+  color: var(--text-muted);
+  text-transform: uppercase;
+  font-size: 9px;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+}
+
+.rowValue {
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.up { color: var(--green); }
+.down { color: var(--red); }
+.muted { color: var(--text-muted); }
+
+/* ── Bucket grid (4 cols) ────────────────────────────────────────── */
+
+.bucketGrid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px;
+}
+
+.bucketCell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 6px 4px;
+  background: var(--bg-elevated);
+  border-radius: 2px;
+  min-width: 0;
+}
+
+.bucketLabel {
+  font-size: 9px;
+  color: var(--text-muted);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.bucketValue {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── Buy/Sell ratio bar ──────────────────────────────────────────── */
+
+.ratioBar {
+  margin-top: 6px;
+  height: 4px;
+  width: 100%;
+  background: var(--red);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.ratioBuy {
+  height: 100%;
+  background: var(--green);
+}
+
+/* ── Address rows ────────────────────────────────────────────────── */
+
+.addrRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+}
+
+.addrLink {
+  flex: 1;
+  color: var(--accent);
+  text-decoration: none;
+  font-variant-numeric: tabular-nums;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: right;
+}
+
+.addrLink:hover {
+  text-decoration: underline;
+}
+
+.copyBtn {
+  width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  font-size: 11px;
+  cursor: pointer;
+  transition: all var(--dur-fast) var(--ease-out);
+}
+
+.copyBtn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+  border-color: var(--accent-dim);
+}
+
+/* ── Links ───────────────────────────────────────────────────────── */
+
+.linkRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.linkChip {
+  padding: 4px 8px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  color: var(--text-secondary);
+  text-decoration: none;
+  transition: all var(--dur-fast) var(--ease-out);
+}
+
+.linkChip:hover {
+  background: var(--bg-hover);
+  color: var(--accent);
+  border-color: var(--accent-dim);
+}
+
+/* ── Empty state ─────────────────────────────────────────────────── */
+
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  text-align: center;
+  padding: 32px 16px;
+  color: var(--text-muted);
+  gap: 6px;
+}
+
+.emptyIcon {
+  font-size: 32px;
+  margin-bottom: 8px;
+  opacity: 0.5;
+  color: var(--accent-dim);
+}
+
+.emptyTitle {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+}
+
+.emptyHint {
+  font-size: 10px;
+  font-family: var(--font-mono);
+}

@@ -1,0 +1,162 @@
+/**
+ * @file Chart.module.css
+ * @layer panel
+ * @desc Chart panel styles. Header info bar + iframe full bleed.
+ */
+
+.body {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg-base);
+}
+
+.infoBar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-elevated);
+  flex-wrap: wrap;
+}
+
+.tokenName {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-mono);
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+.icon {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--bg-active);
+}
+
+.price {
+  font-family: var(--font-mono);
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.changes {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.changeLabel {
+  color: var(--text-muted);
+  text-transform: uppercase;
+  font-size: 9px;
+  letter-spacing: 0.05em;
+  margin-right: 4px;
+}
+
+.up { color: var(--green); }
+.down { color: var(--red); }
+.muted { color: var(--text-muted); }
+
+.spacer { flex: 1; }
+
+.resBar {
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  background: var(--bg-base);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+}
+
+.resBtn {
+  padding: 3px 8px;
+  font-size: 10px;
+  font-weight: 500;
+  font-family: var(--font-mono);
+  color: var(--text-secondary);
+  border-radius: 2px;
+  transition: all var(--dur-fast) var(--ease-out);
+}
+
+.resBtn:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+
+.resBtnActive {
+  color: var(--text-primary) !important;
+  background: var(--accent-dim) !important;
+}
+
+.embedWrap {
+  flex: 1;
+  position: relative;
+  background: var(--bg-base);
+  overflow: hidden;
+}
+
+.iframe {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: var(--bg-base);
+  z-index: 2;
+}
+
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  text-align: center;
+  padding: 32px;
+  color: var(--text-muted);
+}
+
+.emptyIcon {
+  font-size: 48px;
+  margin-bottom: 16px;
+  opacity: 0.5;
+  font-family: var(--font-mono);
+  color: var(--accent-dim);
+}
+
+.emptyTitle {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  margin-bottom: 6px;
+}
+
+.emptyHint {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.loading {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-family: var(--font-mono);
+  background: var(--bg-base);
+  z-index: 1;
+  pointer-events: none;
+}

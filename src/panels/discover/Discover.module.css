@@ -1,0 +1,297 @@
+/**
+ * @file Discover.module.css
+ * @layer panel
+ * @desc Two-tab Discover panel: tabs + chain chips on top, dense scrollable
+ *       table body, status footer.
+ */
+
+.body {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg-base);
+  font-family: var(--font-mono);
+}
+
+/* ── Toolbar ─────────────────────────────────────────────────────── */
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-elevated);
+  flex-shrink: 0;
+}
+
+.tabs {
+  display: flex;
+  gap: 4px;
+}
+
+.tab {
+  padding: 4px 10px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-family: var(--font-mono);
+  transition: all var(--dur-fast) var(--ease-out);
+}
+
+.tab:hover {
+  color: var(--text-primary);
+  border-color: var(--accent-dim);
+}
+
+.tabActive {
+  composes: tab;
+  background: var(--accent-dim);
+  color: var(--accent);
+  border-color: var(--accent-dim);
+}
+
+.chains {
+  display: flex;
+  gap: 2px;
+}
+
+.chip {
+  padding: 3px 8px;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 2px;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-family: var(--font-mono);
+  transition: all var(--dur-fast) var(--ease-out);
+}
+
+.chip:hover {
+  color: var(--text-secondary);
+  background: var(--bg-hover);
+}
+
+.chipActive {
+  composes: chip;
+  color: var(--accent);
+  background: var(--bg-hover);
+  border-color: var(--accent-dim);
+}
+
+.meta {
+  margin-left: auto;
+  font-size: 9px;
+  color: var(--text-muted);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+/* ── Table ───────────────────────────────────────────────────────── */
+
+.tableWrap {
+  flex: 1;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+  position: relative;
+}
+
+.tableWrap::-webkit-scrollbar { width: 6px; }
+.tableWrap::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 3px;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.table thead {
+  position: sticky;
+  top: 0;
+  background: var(--bg-elevated);
+  z-index: 1;
+}
+
+.table th {
+  padding: 6px 10px;
+  text-align: center;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.thLeft { text-align: left; }
+.thRight { text-align: right; }
+
+.row, .rowActive {
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-out);
+}
+
+.row:hover {
+  background: var(--bg-hover);
+}
+
+.rowActive {
+  background: var(--accent-dim);
+}
+
+.row td, .rowActive td {
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border-subtle, var(--border));
+  white-space: nowrap;
+  vertical-align: middle;
+  text-align: center;
+}
+
+.tdRight { text-align: right; }
+
+/* ── Token cell ──────────────────────────────────────────────────── */
+
+.tdToken {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  text-align: left !important;
+  max-width: 240px;
+}
+
+.icon, .iconFallback {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--bg-active);
+}
+
+.iconFallback {
+  border: 1px dashed var(--border);
+}
+
+.tokenText {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.symbol {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-primary);
+  letter-spacing: 0.02em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.name {
+  font-size: 9px;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 200px;
+}
+
+/* ── Chain badge & signal badges ─────────────────────────────────── */
+
+.chainBadge {
+  display: inline-block;
+  padding: 1px 6px;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  color: var(--text-secondary);
+}
+
+.badgeHot {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 7px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  background: rgba(255, 122, 0, 0.12);
+  color: var(--orange, #ff7a00);
+  border: 1px solid var(--orange, #ff7a00);
+  border-radius: 2px;
+}
+
+.badgeIdle {
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+.scoreCell {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+/* ── Color helpers ───────────────────────────────────────────────── */
+
+.up    { color: var(--green); }
+.down  { color: var(--red); }
+.muted { color: var(--text-muted); }
+
+/* ── Footer ──────────────────────────────────────────────────────── */
+
+.footer {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border-top: 1px solid var(--border);
+  background: var(--bg-elevated);
+  font-size: 9px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--green);
+  box-shadow: 0 0 6px var(--green);
+}
+
+.spacer {
+  flex: 1;
+}
+
+/* ── Empty state ─────────────────────────────────────────────────── */
+
+.empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 16px;
+  font-size: 11px;
+  color: var(--text-muted);
+  text-align: center;
+}

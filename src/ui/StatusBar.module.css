@@ -1,0 +1,110 @@
+/**
+ * @file StatusBar.module.css
+ * @layer ui
+ * @desc Bottom 24px status bar — chain, connection, latency, clock.
+ */
+
+.bar {
+  display: flex;
+  align-items: center;
+  height: var(--statusbar-height);
+  padding: 0 10px;
+  background: var(--bg-panel);
+  border-top: 1px solid var(--border);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-secondary);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  flex-shrink: 0;
+  gap: 14px;
+}
+
+.cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.label {
+  color: var(--text-muted);
+  font-size: 9px;
+  letter-spacing: 0.1em;
+}
+
+.value {
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.dotOnline {
+  background: var(--green);
+  box-shadow: 0 0 4px var(--green);
+  animation: pulse 2s ease-in-out infinite;
+}
+
+.dotDegraded {
+  background: var(--yellow);
+}
+
+.dotOffline {
+  background: var(--red);
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+.spacer { flex: 1; }
+
+.chainSelect {
+  appearance: none;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-primary);
+  background: var(--bg-base);
+  border: 1px solid var(--border);
+  padding: 1px 18px 1px 6px;
+  border-radius: 2px;
+  cursor: pointer;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='8' height='8' viewBox='0 0 8 8'><path d='M2 3l2 2 2-2' fill='none' stroke='%238888a0' stroke-width='1' stroke-linecap='round' stroke-linejoin='round'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 4px center;
+}
+
+.chainSelect:hover {
+  border-color: var(--accent);
+}
+
+.divider {
+  width: 1px;
+  height: 12px;
+  background: var(--border);
+}
+
+.help {
+  color: var(--text-muted);
+  font-size: 9px;
+}
+
+.kbd {
+  display: inline-block;
+  padding: 0 4px;
+  margin: 0 2px;
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  background: var(--bg-base);
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+}

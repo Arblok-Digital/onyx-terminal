@@ -1,0 +1,13 @@
+# Dependencies
+node_modules/
+
+# Production build
+dist/
+
+# Environment variables (Sangat penting agar API Key tidak bocor)
+.env
+.env.local
+
+# Logs and system files
+npm-debug.log*
+.DS_Store

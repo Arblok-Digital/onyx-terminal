@@ -1,0 +1,215 @@
+/**
+ * @file index.css
+ * @layer ui
+ * @desc Global design tokens + base styles for Onyx Terminal.
+ *       Pure CSS Variables + CSS Modules. No Tailwind, no CSS-in-JS.
+ * @exposes :root design tokens, base reset, react-grid-layout overrides
+ */
+
+/* ============================================================
+   DESIGN TOKENS — Single source of truth for visual identity
+   ============================================================ */
+:root {
+  /* Backgrounds */
+  --bg-base:        #0a0a0b;
+  --bg-panel:       #111113;
+  --bg-hover:       #1a1a1e;
+  --bg-active:      #222228;
+  --bg-elevated:    #18181c;
+
+  /* Borders */
+  --border:         #2a2a30;
+  --border-bright:  #3a3a42;
+  --border-focus:   #7c6df0;
+
+  /* Text */
+  --text-primary:   #e8e8f0;
+  --text-secondary: #8888a0;
+  --text-muted:     #555566;
+  --text-disabled:  #333340;
+
+  /* Brand */
+  --accent:         #7c6df0;
+  --accent-dim:     #3d3680;
+  --accent-glow:    rgba(124, 109, 240, 0.15);
+
+  /* Semantic */
+  --green:          #22c55e;
+  --green-dim:      #16532a;
+  --red:            #ef4444;
+  --red-dim:        #5c1a1a;
+  --yellow:         #f59e0b;
+  --blue:           #3b82f6;
+  --orange:         #f97316;
+
+  /* Typography */
+  --font-mono: 'JetBrains Mono', 'Fira Code', ui-monospace, monospace;
+  --font-ui:   'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+
+  /* Layout */
+  --panel-radius:     4px;
+  --ticker-height:    36px;
+  --statusbar-height: 24px;
+  --panel-header:     32px;
+
+  /* Shadows */
+  --shadow-panel: 0 0 0 1px var(--border), 0 4px 24px rgba(0, 0, 0, 0.4);
+  --shadow-modal: 0 0 0 1px var(--border-bright), 0 8px 48px rgba(0, 0, 0, 0.7);
+
+  /* Motion */
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --dur-fast: 120ms;
+  --dur-med: 240ms;
+
+  color-scheme: dark;
+}
+
+/* ============================================================
+   BASE RESET
+   ============================================================ */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+}
+
+body {
+  font-family: var(--font-ui);
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--text-primary);
+  background: var(--bg-base);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+button {
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+}
+
+input {
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+  background: none;
+  border: none;
+  outline: none;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+/* Numbers, prices — always tabular */
+.tabular {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
+
+/* Scrollbar — minimal, terminal-style */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg-base);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--border-bright);
+}
+
+/* ============================================================
+   REACT-GRID-LAYOUT OVERRIDES — match Onyx aesthetic
+   ============================================================ */
+.react-grid-layout {
+  position: relative;
+  transition: height 200ms ease;
+}
+
+.react-grid-item {
+  transition: all 200ms ease;
+  transition-property: left, top, width, height;
+}
+
+.react-grid-item.cssTransforms {
+  transition-property: transform, width, height;
+}
+
+.react-grid-item.resizing {
+  z-index: 1;
+  opacity: 0.9;
+}
+
+.react-grid-item.react-draggable-dragging {
+  transition: none;
+  z-index: 3;
+  cursor: grabbing;
+}
+
+.react-grid-item.react-grid-placeholder {
+  background: var(--accent-glow);
+  border: 1px dashed var(--accent);
+  border-radius: var(--panel-radius);
+  opacity: 1;
+  transition-duration: 100ms;
+  z-index: 2;
+}
+
+.react-grid-item > .react-resizable-handle {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  bottom: 0;
+  right: 0;
+  cursor: se-resize;
+  opacity: 0;
+  transition: opacity var(--dur-fast) var(--ease-out);
+}
+
+.react-grid-item:hover > .react-resizable-handle {
+  opacity: 1;
+}
+
+.react-grid-item > .react-resizable-handle::after {
+  content: "";
+  position: absolute;
+  right: 3px;
+  bottom: 3px;
+  width: 6px;
+  height: 6px;
+  border-right: 2px solid var(--text-muted);
+  border-bottom: 2px solid var(--text-muted);
+}
+
+/* Selection */
+::selection {
+  background: var(--accent-glow);
+  color: var(--text-primary);
+}
