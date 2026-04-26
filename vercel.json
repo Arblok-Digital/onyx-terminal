@@ -1,8 +1,5 @@
 {
+  "outputDirectory": "dist",
   "buildCommand": "npm run build",
-  "outputDirectory": "dist/public",
-  "framework": "vite",
-  "rewrites": [
-    { "source": "/(.*)", "destination": "/index.html" }
-  ]
+  "framework": "vite"
 }
