@@ -9,6 +9,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import GridLayout, { WidthProvider } from "react-grid-layout/legacy";
 import type { LayoutItem } from "react-grid-layout/legacy";
+import { RotateCcw } from "lucide-react";
 import "react-grid-layout/css/styles.css";
 
 import Ticker from "./Ticker";
@@ -33,7 +34,7 @@ const ROWS = 12;
 const MARGIN = 6;
 
 export default function Terminal() {
-  const { layouts, onLayoutChange } = useLayout();
+  const { layouts, onLayoutChange, reset } = useLayout();
   const setActiveToken = useUIStore((s) => s.setActiveToken);
   const activeToken = useUIStore((s) => s.activeToken);
 
@@ -100,6 +101,40 @@ export default function Terminal() {
   return (
     <div className={styles.root}>
       <Ticker />
+
+      {/* Floating Layout Reset Control */}
+      <div style={{
+        position: 'absolute',
+        top: '36px',
+        right: '12px',
+        zIndex: 1000,
+      }}>
+        <button
+          onClick={() => {
+            if (confirm("Reset layout to default Bloomberg view?")) {
+              reset();
+              // Force hard reload to ensure React Grid Layout internal state is cleared
+              window.location.reload();
+            }
+          }}
+          style={{
+            background: '#111827',
+            border: '1px solid #374151',
+            color: '#9ca3af',
+            padding: '4px 8px',
+            borderRadius: '4px',
+            fontSize: '9px',
+            fontWeight: '800',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '4px',
+          }}
+        >
+          <RotateCcw size={10} />
+          RESET LAYOUT
+        </button>
+      </div>
 
       <div className={styles.gridWrap} ref={wrapRef}>
         <div className={styles.gridInner}>
