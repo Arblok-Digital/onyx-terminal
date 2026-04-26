@@ -9,7 +9,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import GridLayout, { WidthProvider } from "react-grid-layout/legacy";
 import type { LayoutItem } from "react-grid-layout/legacy";
-import { RotateCcw } from "lucide-react";
+import { RotateCcw, BarChart3, Repeat, Activity, Globe } from "lucide-react";
 import "react-grid-layout/css/styles.css";
 
 import Ticker from "./Ticker";
@@ -22,6 +22,7 @@ import Discover from "@/panels/discover/Discover";
 import FlowMonitor from "@/panels/flow-monitor/FlowMonitor";
 
 import { useLayout } from "@/hooks/useLayout";
+import { useLayoutStore } from "@/core/store/layout.store";
 import { useWatchlistStore } from "@/panels/watchlist/watchlist.store";
 import { useUIStore } from "@/core/store/ui.store";
 import { usePriceStore } from "@/core/store/price.store";
@@ -37,6 +38,15 @@ export default function Terminal() {
   const { layouts, onLayoutChange, reset } = useLayout();
   const setActiveToken = useUIStore((s) => s.setActiveToken);
   const activeToken = useUIStore((s) => s.activeToken);
+  const mobileTab = useLayoutStore((s) => s.mobileTab);
+  const setMobileTab = useLayoutStore((s) => s.setMobileTab);
+
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
 
   // Dynamic row height — fit ROWS into the available container height.
   const wrapRef = useRef<HTMLDivElement | null>(null);
@@ -97,6 +107,82 @@ export default function Terminal() {
     () => layouts.map((l) => ({ ...l })),
     [layouts],
   );
+
+  if (isMobile) {
+    return (
+      <div className={styles.root} style={{ display: 'flex', flexDirection: 'column' }}>
+        <Ticker />
+        
+        {/* Mobile Content Area */}
+        <div style={{ flex: 1, overflowY: 'auto', padding: '6px', paddingBottom: '80px' }}>
+          {mobileTab === 'market' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <Info />
+              <Watchlist />
+            </div>
+          )}
+          {mobileTab === 'trade' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <div style={{ height: '350px' }}><Chart /></div>
+              <Swap />
+            </div>
+          )}
+          {mobileTab === 'flow' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <FlowMonitor />
+              <Discover />
+            </div>
+          )}
+        </div>
+
+        {/* Bottom Navigation Bar */}
+        <div style={{
+          position: 'fixed',
+          bottom: '24px', // Di atas status bar
+          left: 0,
+          right: 0,
+          height: '56px',
+          background: '#0a0a0b',
+          borderTop: '1px solid #1f2937',
+          display: 'flex',
+          justifyContent: 'space-around',
+          alignItems: 'center',
+          zIndex: 2000,
+        }}>
+          <button 
+            onClick={() => setMobileTab('market')}
+            style={{ background: 'none', border: 'none', color: mobileTab === 'market' ? '#3b82f6' : '#6b7280', display: 'flex', flexDirection: 'column', alignItems: 'center', fontSize: '10px' }}
+          >
+            <Globe size={20} />
+            <span>MARKET</span>
+          </button>
+          <button 
+            onClick={() => setMobileTab('trade')}
+            style={{ 
+              background: mobileTab === 'trade' ? '#3b82f6' : '#1f2937', 
+              border: 'none', 
+              color: mobileTab === 'trade' ? '#fff' : '#9ca3af', 
+              width: '50px', height: '50px', borderRadius: '50%', marginTop: '-30px', 
+              boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
+              display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', fontSize: '9px' 
+            }}
+          >
+            <Repeat size={20} />
+            <span>TRADE</span>
+          </button>
+          <button 
+            onClick={() => setMobileTab('flow')}
+            style={{ background: 'none', border: 'none', color: mobileTab === 'flow' ? '#3b82f6' : '#6b7280', display: 'flex', flexDirection: 'column', alignItems: 'center', fontSize: '10px' }}
+          >
+            <Activity size={20} />
+            <span>FLOW</span>
+          </button>
+        </div>
+
+        <StatusBar />
+      </div>
+    );
+  }
 
   return (
     <div className={styles.root}>

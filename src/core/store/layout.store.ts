@@ -19,11 +19,14 @@ export type PanelLayout = {
   minH?: number;
 };
 
+export type MobileTab = "market" | "trade" | "flow";
+
 type State = {
   layouts: PanelLayout[];
   hidden: Set<string>;
   /** Currently focused panel (Cmd+K target) */
   focused: string | null;
+  mobileTab: MobileTab;
 };
 
 type Actions = {
@@ -31,9 +34,10 @@ type Actions = {
   toggleHidden: (id: string) => void;
   setFocused: (id: string | null) => void;
   reset: () => void;
+  setMobileTab: (tab: MobileTab) => void;
 };
 
-const STORAGE_KEY = "onyx.layout.v9"; // Naikin ke v9 untuk aktivasi tombol reset layout pro
+const STORAGE_KEY = "onyx.layout.v10"; // v10: Mobile Tabs Support
 
 const DEFAULT_LAYOUTS: PanelLayout[] = [
   { i: "info", x: 0, y: 0, w: 2, h: 12, minW: 2, minH: 3 },      // SOL INFO (Tinggi penuh 12)
@@ -73,6 +77,7 @@ export const useLayoutStore = create<State & Actions>((set, get) => ({
   layouts: initial.layouts,
   hidden: initial.hidden,
   focused: null,
+  mobileTab: "trade", // Default ke Chart & Swap biar langsung siap tempur
 
   setLayouts: (layouts) => {
     set({ layouts });
@@ -93,4 +98,6 @@ export const useLayoutStore = create<State & Actions>((set, get) => ({
     set({ layouts: DEFAULT_LAYOUTS, hidden: new Set() });
     persist({ layouts: DEFAULT_LAYOUTS, hidden: new Set() });
   },
+
+  setMobileTab: (mobileTab) => set({ mobileTab }),
 }));
