@@ -13,9 +13,7 @@ export default defineConfig({
     VitePWA({
       injectRegister: 'auto',
       devOptions: {
-        enabled: true // Biar bisa ngetest PWA di localhost
-        enabled: true,
-        type: 'module'
+        enabled: true, // Biar bisa ngetest PWA di localhost
       },
       registerType: "autoUpdate",
       includeAssets: ["favicon.svg", "icons/apple-touch-icon.png"],
