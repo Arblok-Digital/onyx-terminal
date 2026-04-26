@@ -18,6 +18,7 @@ import Chart from "@/panels/chart/Chart";
 import Info from "@/panels/info/Info";
 import Swap from "@/panels/swap/Swap";
 import Discover from "@/panels/discover/Discover";
+import FlowMonitor from "@/panels/flow-monitor/FlowMonitor";
 
 import { useLayout } from "@/hooks/useLayout";
 import { useWatchlistStore } from "@/panels/watchlist/watchlist.store";
@@ -141,6 +142,9 @@ export default function Terminal() {
             </div>
             <div key="discover">
               <Discover />
+            </div>
+            <div key="flow-monitor">
+              <FlowMonitor />
             </div>
           </ResponsiveGrid>
         </div>

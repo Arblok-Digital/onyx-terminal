@@ -41,6 +41,7 @@ const DEFAULT_LAYOUTS: PanelLayout[] = [
   { i: "info", x: 9, y: 0, w: 3, h: 5, minW: 2, minH: 3 },
   { i: "swap", x: 9, y: 5, w: 3, h: 7, minW: 2, minH: 5 },
   { i: "discover", x: 0, y: 8, w: 9, h: 4, minW: 4, minH: 3 },
+  { i: "flow-monitor", x: 0, y: 12, w: 3, h: 6, minW: 2, minH: 4 },
 ];
 
 type Persisted = { layouts: PanelLayout[]; hidden: string[] };

@@ -8,7 +8,7 @@ export const CONFIG = {
   JUPITER_REFERRAL_WALLET: import.meta.env.VITE_JUPITER_REFERRAL_WALLET || "5wYwgdRCUDPPtXTrAhPWr7GiqaXHzKWaLPDDj7REtV43",
   
   // API Keys (Helius & Birdeye)
-  HELIUS_API_KEY: import.meta.env.VITE_HELIUS_API_KEY || "",
+  HELIUS_API_KEY: import.meta.env.VITE_HELIUS_API_KEY || "6aa38557-de0e-43c2-a65c-c7cc113d0e33",
   BIRDEYE_API_KEY: import.meta.env.VITE_BIRDEYE_API_KEY || "",
 
   // API Endpoints
