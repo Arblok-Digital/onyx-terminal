@@ -1,7 +1,10 @@
 import { useEffect, useState } from "react";
 import { formatUsd, formatCompact } from "@/utils/format";
 import { getTokensBatch } from "@/feeds/dexscreener";
+import ShareButton from "@/components/ShareButton";
 import styles from "./FlowMonitor.module.css";
+
+const SHARE_URL = "https://onyx-terminal-v1.vercel.app";
 
 interface FlowData {
   symbol: string;
@@ -75,9 +78,23 @@ export default function MoneyFlow() {
               </td>
             </tr>
           )}
-          {flows.map((f) => (
-            <tr key={f.symbol} className={styles.row}>
-              <td className={styles.bold}>{f.symbol}</td>
+          {flows.map((f) => {
+            const shareText = `📊 ${f.symbol}\n` +
+              `💧 Net Flow: ${f.netFlow > 0 ? "+" : ""}${formatCompact(f.netFlow)}\n` +
+              `🟢 Buy Vol: ${formatCompact(f.buyVol)}\n` +
+              `🔴 Sell Vol: ${formatCompact(f.sellVol)}\n` +
+              `📈 Buy Ratio: ${f.ratio.toFixed(0)}%\n\n` +
+              `Tracked on Onyx Terminal 👁\n` +
+              `#OnyxTerminal #MoneyFlow #Solana`;
+
+            return (
+              <tr key={f.symbol} className={styles.row}>
+              <td className={styles.bold}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  {f.symbol}
+                  <ShareButton text={shareText} url={SHARE_URL} />
+                </div>
+              </td>
               <td>
                 <span className={`${styles.mono} ${f.netFlow > 0 ? styles.textGreen : styles.textRed}`}>
                   {f.netFlow > 0 ? "+" : ""}{formatCompact(f.netFlow)}
@@ -101,7 +118,8 @@ export default function MoneyFlow() {
                 </div>
               </td>
             </tr>
-          ))}
+            );
+          })}
         </tbody>
       </table>
     </div>

@@ -13,6 +13,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Panel from "@/ui/Panel";
 import { getLatestProfiles, getTokensBatch } from "@/feeds/dexscreener";
+import ShareButton from "@/components/ShareButton";
 import type { TokenProfile } from "@/feeds/dexscreener";
 import { usePriceStore } from "@/core/store/price.store";
 import { useUIStore } from "@/core/store/ui.store";
@@ -29,6 +30,8 @@ import {
 import styles from "./Discover.module.css";
 
 type Tab = "listings" | "signals";
+
+const SHARE_URL = "https://onyx-terminal-v1.vercel.app";
 
 export default function Discover() {
   const [profiles, setProfiles] = useState<TokenProfile[]>([]);
@@ -202,6 +205,15 @@ function ListingsTable({
           const name = r.snap?.name ?? r.profile.tokenAddress.slice(0, 6) + "…";
           const ch = r.snap?.priceChange24h;
           const isActive = r.profile.tokenAddress.toLowerCase() === activeAddr;
+
+          const shareText = `📊 ${sym}\n` +
+            ` Price: ${r.snap?.priceUsd !== undefined ? formatPrice(r.snap.priceUsd) : "—"}\n` +
+            `📈 24h: ${ch !== undefined ? formatPercent(ch) : "—"}\n` +
+            `💰 Vol: ${r.snap?.volume24h !== undefined ? formatUsd(r.snap.volume24h) : "—"}\n` +
+            `💧 Liq: ${r.snap?.liquidity !== undefined ? formatUsd(r.snap.liquidity) : "—"}\n\n` +
+            `Tracked on Onyx Terminal 👁\n` +
+            `#OnyxTerminal #NewListing #SolanaGems`;
+
           return (
             <tr
               key={r.profile.tokenAddress}
@@ -217,7 +229,10 @@ function ListingsTable({
                   <span className={styles.iconFallback} />
                 )}
                 <div className={styles.tokenText}>
-                  <div className={styles.symbol}>{sym}</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <div className={styles.symbol}>{sym}</div>
+                    <ShareButton text={shareText} url={SHARE_URL} />
+                  </div>
                   <div className={styles.name}>{name}</div>
                 </div>
               </td>
@@ -273,6 +288,14 @@ function SignalsTable({
       <tbody>
         {rows.map((r) => {
           const isActive = r.snap.address.toLowerCase() === activeAddr;
+          const shareText = `🔥 ${r.snap.symbol}\n` +
+            `🚀 Spike: ${r.spike.toFixed(1)}x\n` +
+            `🎯 Signal: ${r.hot ? 'HOT' : 'STRONG'}\n` +
+            `💎 Score: ${formatCompact(r.score)}\n` +
+            `🟢 Buy%: ${(r.buyPct * 100).toFixed(0)}%\n\n` +
+            `See everything. Miss nothing. 👁\n\n` +
+            `#OnyxTerminal #SolanaSignals #AlphaCall`;
+
           return (
             <tr
               key={r.snap.address}
@@ -291,7 +314,10 @@ function SignalsTable({
                   <span className={styles.iconFallback} />
                 )}
                 <div className={styles.tokenText}>
-                  <div className={styles.symbol}>{r.snap.symbol}</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <div className={styles.symbol}>{r.snap.symbol}</div>
+                    <ShareButton text={shareText} url={SHARE_URL} />
+                  </div>
                   <div className={styles.name}>
                     {r.snap.name} · {CHAIN_LABELS[r.snap.chain]}
                   </div>

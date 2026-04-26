@@ -12,6 +12,7 @@
 import { useState } from "react";
 import Panel from "@/ui/Panel";
 import { useUIStore } from "@/core/store/ui.store";
+import ShareButton from "@/components/ShareButton";
 import { usePriceFor } from "@/hooks/usePrice";
 import {
   formatPrice,
@@ -145,6 +146,16 @@ export default function Info() {
     );
   }
 
+  const shareText = `📊 ${snap.symbol}\n` +
+    `💵 Price: ${formatPrice(snap.priceUsd)}\n` +
+    `📈 24h: ${snap.priceChange24h !== undefined ? formatPercent(snap.priceChange24h) : "—"}\n` +
+    `💰 Vol: ${snap.volume24h !== undefined ? formatUsd(snap.volume24h) : "—"}\n` +
+    `💧 Liq: ${snap.liquidity !== undefined ? formatUsd(snap.liquidity) : "—"}\n\n` +
+    `Tracked on Onyx Terminal 👁\n` +
+    `#OnyxTerminal #Solana #CryptoTrading`;
+
+  const shareUrl = "https://onyx-terminal-v1.vercel.app";
+
   return (
     <Panel id="info" title={`${snap.symbol} · INFO`}>
       <div className={styles.body}>
@@ -155,7 +166,10 @@ export default function Info() {
               <img className={styles.heroIcon} src={snap.iconUrl} alt={snap.symbol} />
             )}
             <div className={styles.heroText}>
-              <div className={styles.heroName}>{snap.name}</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <div className={styles.heroName}>{snap.name}</div>
+                <ShareButton text={shareText} url={shareUrl} />
+              </div>
               <div className={styles.heroSym}>{snap.symbol}</div>
             </div>
             <div className={styles.heroPrice}>{formatPrice(snap.priceUsd)}</div>

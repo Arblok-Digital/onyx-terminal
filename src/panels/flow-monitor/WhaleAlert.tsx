@@ -2,6 +2,7 @@ import { useEffect, useState, useRef } from "react";
 import { CONFIG } from "@/core/config";
 import { usePriceStore } from "@/core/store/price.store";
 import { formatAddress, formatUsd } from "@/utils/format";
+import ShareButton from "@/components/ShareButton";
 import styles from "./FlowMonitor.module.css";
 
 interface WhaleTx {
@@ -16,6 +17,7 @@ interface WhaleTx {
 }
 
 const SOL_MINT = "So11111111111111111111111111111111111111112";
+const SHARE_URL = "https://onyx-terminal-v1.vercel.app";
 
 export default function WhaleAlert() {
   const [alerts, setAlerts] = useState<WhaleTx[]>([]);
@@ -148,9 +150,23 @@ export default function WhaleAlert() {
           </tr>
         </thead>
         <tbody>
-          {alerts.map((tx) => (
-            <tr key={tx.id} className={styles.row}>
-              <td className={styles.mono}>{tx.token}</td>
+          {alerts.map((tx) => {
+            const shareText = `🚨 WHALE ALERT\n` +
+              `🪙 Token: ${tx.token}\n` +
+              `⚡ Type: ${tx.type}\n` +
+              `💰 Amount: ${formatUsd(tx.amount)}\n` +
+              `👛 Wallet: ${tx.wallet}\n\n` +
+              `Tracked on Onyx Terminal 👁\n` +
+              `#OnyxTerminal #WhaleAlert #SolanaGems`;
+
+            return (
+              <tr key={tx.id} className={styles.row}>
+              <td className={styles.mono}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  {tx.token}
+                  <ShareButton text={shareText} url={SHARE_URL} />
+                </div>
+              </td>
               <td>
                 <span className={tx.type === "BUY" ? styles.textGreen : styles.textRed}>
                   {tx.type}
@@ -171,7 +187,8 @@ export default function WhaleAlert() {
                 </a>
               </td>
             </tr>
-          ))}
+            );
+          })}
           {alerts.length === 0 && (
             <tr>
               <td colSpan={5} className={styles.empty}>
