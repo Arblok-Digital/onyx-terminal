@@ -11,6 +11,10 @@ export default defineConfig({
     react(),
     // runtimeErrorOverlay() removed as it's a Replit-specific plugin
     VitePWA({
+      injectRegister: 'auto',
+      devOptions: {
+        enabled: true // Biar bisa ngetest PWA di localhost
+      },
       registerType: "autoUpdate",
       includeAssets: ["favicon.svg", "icons/apple-touch-icon.png"],
       workbox: {
@@ -53,13 +57,19 @@ export default defineConfig({
             src: "icons/icon-192.png",
             sizes: "192x192",
             type: "image/png",
-            purpose: "any maskable",
+            purpose: "any",
+          },
+          {
+            src: "icons/icon-192.png",
+            sizes: "192x192",
+            type: "image/png",
+            purpose: "maskable",
           },
           {
             src: "icons/icon-512.png",
             sizes: "512x512",
             type: "image/png",
-            purpose: "any maskable",
+            purpose: "any",
           },
         ],
       },
