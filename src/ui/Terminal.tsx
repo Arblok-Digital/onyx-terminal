@@ -114,7 +114,7 @@ export default function Terminal() {
         <Ticker />
         
         {/* Mobile Content Area */}
-        <div style={{ flex: 1, overflowY: 'auto', padding: '6px', paddingBottom: '80px' }}>
+        <div style={{ flex: 1, overflowY: 'auto', padding: '10px', paddingBottom: '100px' }}>
           {mobileTab === 'market' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
               <Info />
@@ -138,16 +138,18 @@ export default function Terminal() {
         {/* Bottom Navigation Bar */}
         <div style={{
           position: 'fixed',
-          bottom: '24px', // Di atas status bar
+          bottom: 0,
           left: 0,
           right: 0,
-          height: '56px',
-          background: '#0a0a0b',
-          borderTop: '1px solid #1f2937',
+          height: '65px',
+          background: 'rgba(10, 10, 11, 0.8)',
+          backdropFilter: 'blur(12px)',
+          borderTop: '1px solid rgba(255, 255, 255, 0.1)',
           display: 'flex',
           justifyContent: 'space-around',
           alignItems: 'center',
           zIndex: 2000,
+          paddingBottom: 'env(safe-area-inset-bottom)', // Support untuk notch iPhone
         }}>
           <button 
             onClick={() => setMobileTab('market')}
@@ -178,8 +180,6 @@ export default function Terminal() {
             <span>FLOW</span>
           </button>
         </div>
-
-        <StatusBar />
       </div>
     );
   }
