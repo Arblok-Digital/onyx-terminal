@@ -45,8 +45,8 @@
 
 .table { width: 100%; border-collapse: collapse; font-size: 11px; }
 .table th { text-align: left; padding: 8px 4px; color: #6b7280; font-weight: 500; border-bottom: 1px solid #1f2937; }
-.row { border-bottom: 1px solid #111827; }
-.row:hover { background: #111827; }
+.row { border-bottom: 1px solid #111827; cursor: pointer; transition: background 0.1s ease; }
+.row:hover { background: rgba(59, 130, 246, 0.1); }
 .row td { padding: 8px 4px; vertical-align: middle; }
 
 /* Typography & Colors */
