@@ -15,11 +15,11 @@ import WatchlistRow from "./WatchlistRow";
 import styles from "./Watchlist.module.css";
 import type { TokenSnapshot, ChainId } from "@/core/store/price.store";
 
-type SortField = "default" | "change1h" | "change24h" | "volume" | "price";
+type SortField = "default" | "price" | "change1h" | "change24h" | "volume";
 
-const COLUMNS: { id: SortField; label: string; numeric?: boolean }[] = [
-  { id: "default", label: "Token" },
-  { id: "price", label: "Price", numeric: true },
+const COLUMNS: { id: SortField; label: string; numeric?: boolean; essential?: boolean }[] = [
+  { id: "default", label: "Token", essential: true },
+  { id: "price", label: "Price", numeric: true, essential: true },
   { id: "change1h", label: "1H %", numeric: true },
   { id: "change24h", label: "24H %", numeric: true },
   { id: "volume", label: "Vol 24H", numeric: true },
@@ -149,6 +149,7 @@ export default function Watchlist() {
                 styles.th,
                 col.numeric ? styles.thNumeric : "",
                 sortBy === col.id ? styles.thActive : "",
+                !col.essential ? styles.hideMobile : ""
               ].join(" ")}
               onClick={() => setSort(col.id)}
             >

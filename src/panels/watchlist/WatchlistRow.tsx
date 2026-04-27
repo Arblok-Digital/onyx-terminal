@@ -70,13 +70,13 @@ export default function WatchlistRow({
       <div className={styles.numeric}>
         {snap?.priceUsd !== undefined ? formatPrice(snap.priceUsd) : "—"}
       </div>
-      <div className={`${styles.numeric} ${ch1Class}`}>
+      <div className={`${styles.numeric} ${ch1Class} ${styles.hideMobile}`}>
         {ch1 !== undefined ? formatPercent(ch1) : "—"}
       </div>
-      <div className={`${styles.numeric} ${ch24Class}`}>
+      <div className={`${styles.numeric} ${ch24Class} ${styles.hideMobile}`}>
         {ch24 !== undefined ? formatPercent(ch24) : "—"}
       </div>
-      <div className={`${styles.numeric} ${styles.muted}`}>
+      <div className={`${styles.numeric} ${styles.muted} ${styles.hideMobile}`}>
         {snap?.volume24h !== undefined ? formatCompact(snap.volume24h) : "—"}
       </div>
       <button

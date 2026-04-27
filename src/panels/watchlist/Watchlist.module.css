@@ -64,7 +64,7 @@
 .thead {
   display: grid;
   grid-template-columns: 1fr 80px 70px 70px 80px 24px;
-  gap: 8px;
+  gap: 4px;
   padding: 6px 10px;
   font-size: 10px;
   font-weight: 500;
@@ -100,11 +100,12 @@
 .rows {
   flex: 1;
   overflow-y: auto;
-  overflow-x: hidden;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .empty {
-  padding: 24px 16px;
+  padding: 40px 16px;
   text-align: center;
   color: var(--text-muted);
   font-size: 11px;
@@ -113,7 +114,7 @@
 .row {
   display: grid;
   grid-template-columns: 1fr 80px 70px 70px 80px 24px;
-  gap: 8px;
+  gap: 4px;
   align-items: center;
   padding: 7px 10px;
   font-size: 12px;
@@ -223,4 +224,29 @@
 .removeBtn:hover {
   color: var(--red);
   background: var(--red-dim);
+}
+
+/* Mobile Optimization */
+@media (max-width: 600px) {
+  .thead, .row {
+    grid-template-columns: 1fr 75px 24px;
+    gap: 8px;
+    padding: 8px 10px;
+  }
+
+  .hideMobile {
+    display: none !important;
+  }
+
+  .symbol {
+    font-size: 11px;
+  }
+  
+  .numeric {
+    font-size: 11px;
+  }
+
+  .removeBtn {
+    opacity: 1; /* Selalu tampil di mobile karena gak ada hover */
+  }
 }
