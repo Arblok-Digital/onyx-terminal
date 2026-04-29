@@ -165,12 +165,11 @@ export default function WhaleAlert() {
           const logs = response.params.result.value.logs as string[];
           const signature = response.params.result.value.signature;
           
-          // Filter log swap yang lebih komprehensif
+          // Filter lebih longgar agar transaksi tidak terlewat di Free Tier
           const isSwap = logs.some(l => 
-            l.includes('Program log: Instruction: Swap') || 
-            l.includes('Program log: Instruction: Route') ||
-            l.includes('Program log: Buy') ||
-            l.includes('Program log: Sell')
+            l.toLowerCase().includes('swap') || 
+            l.toLowerCase().includes('buy') ||
+            l.toLowerCase().includes('sell')
           );
           
           if (isSwap && signature) processTransaction(signature);
