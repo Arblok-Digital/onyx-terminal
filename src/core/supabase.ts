@@ -1,16 +1,23 @@
 /// <reference types="vite/client" />
 import { createClient } from '@supabase/supabase-js'
+import { CONFIG } from './config'
 
-let supabaseUrl = import.meta.env.VITE_SUPABASE_URL
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+/**
+ * Inisialisasi Supabase Client
+ * Memastikan aplikasi tidak crash jika env vars belum terbaca di Vercel.
+ */
+const rawUrl = CONFIG.SUPABASE_URL?.trim();
+const rawKey = CONFIG.SUPABASE_ANON_KEY?.trim();
 
-if (!supabaseUrl || !supabaseAnonKey) {
-  console.error("Waduh bro, URL atau Key Supabase belum diisi di file .env!")
+// Bersihkan URL: hapus trailing slash atau path rest/v1 jika ada
+const cleanUrl = rawUrl 
+  ? rawUrl.replace(/\/rest\/v1\/?$/, '').replace(/\/$/, '') 
+  : 'https://placeholder-project.supabase.co';
+
+const cleanKey = rawKey || 'placeholder-key';
+
+if (!rawUrl || !rawKey) {
+  console.warn("⚠️ Supabase: VITE_SUPABASE_URL atau VITE_SUPABASE_ANON_KEY tidak ditemukan. Cek Environment Variables di Vercel.");
 }
 
-// Bersihkan URL jika user tidak sengaja memasukkan path /rest/v1 atau slash di akhir
-if (supabaseUrl) {
-  supabaseUrl = supabaseUrl.replace(/\/rest\/v1\/?$/, '').replace(/\/$/, '');
-}
-
-export const supabase = createClient(supabaseUrl, supabaseAnonKey)
+export const supabase = createClient(cleanUrl, cleanKey);

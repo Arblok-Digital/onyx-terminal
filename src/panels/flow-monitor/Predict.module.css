@@ -1,0 +1,27 @@
+.container { display: flex; flex-direction: column; height: 100%; background: var(--bg-panel); }
+.tabs { display: flex; gap: 4px; padding: 8px; border-bottom: 1px solid var(--border); }
+.tabBtn { 
+  background: #1f2937; border: 1px solid #374151; color: #9ca3af; 
+  padding: 4px 8px; border-radius: 4px; font-size: 10px; cursor: pointer; 
+}
+.tabBtn.active { background: #3b82f6; color: white; border-color: #3b82f6; }
+.list { flex: 1; overflow-y: auto; padding: 10px; }
+.loading, .empty { padding: 20px; text-align: center; color: var(--text-muted); font-size: 11px; }
+.card { 
+  background: #111827; border: 1px solid var(--border); border-radius: 6px; 
+  padding: 12px; margin-bottom: 10px; cursor: pointer;
+}
+.card:hover { border-color: #4b5563; }
+.cardHeader { display: flex; justify-content: space-between; font-size: 9px; color: var(--text-muted); margin-bottom: 8px; }
+.question { font-size: 12px; font-weight: 600; color: white; margin-bottom: 12px; line-height: 1.4; }
+.barTrack { height: 6px; background: #374151; border-radius: 3px; overflow: hidden; margin-bottom: 6px; }
+.barFill { height: 100%; background: #3b82f6; transition: width 0.3s ease; }
+.stats { display: flex; justify-content: space-between; font-size: 10px; font-weight: bold; }
+.yes { color: #10b981; }
+.no { color: #ef4444; }
+.tradeBtn { 
+  width: 100%; margin-top: 12px; padding: 6px; background: transparent; 
+  border: 1px solid #3b82f6; color: #3b82f6; border-radius: 4px; 
+  font-size: 10px; font-weight: bold; cursor: pointer;
+}
+.tradeBtn:hover { background: #3b82f6; color: white; }

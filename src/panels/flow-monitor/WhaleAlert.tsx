@@ -233,10 +233,11 @@ export default function WhaleAlert() {
           
           // Cari indikasi aktivitas DEX di log
           const isSwap = logs.some(l => 
-            l.includes('Instruction: Swap') || 
-            l.includes('Program log: Buy') ||
-            l.includes('Program log: Sell') ||
-            l.includes('Instruction: Route') // Jupiter
+            l.toLowerCase().includes('swap') || 
+            l.toLowerCase().includes('buy') ||
+            l.toLowerCase().includes('sell') ||
+            l.toLowerCase().includes('instruction: route') || // Jupiter
+            l.toLowerCase().includes('instruction: swap')
           );
           
           if (isSwap && signature) {
@@ -316,7 +317,7 @@ export default function WhaleAlert() {
           })}
           {alerts.length === 0 && (
             <tr>
-              <td colSpan={5} className={styles.empty}>
+              <td colSpan={6} className={styles.empty}>
                 Waiting for big fish...
               </td>
             </tr>

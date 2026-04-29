@@ -45,7 +45,7 @@ const DEFAULT_LAYOUTS: PanelLayout[] = [
   { i: "swap", x: 7, y: 0, w: 3, h: 5, minW: 3, minH: 4 },       // SWAP (Kanan Tengah)
   { i: "watchlist", x: 10, y: 0, w: 2, h: 5, minW: 2, minH: 3 },  // WATCHLIST (Pojok Kanan)
   { i: "discover", x: 2, y: 7, w: 5, h: 5, minW: 4, minH: 3 },   // DISCOVER (Pas di bawah chart)
-  { i: "flow-monitor", x: 7, y: 5, w: 5, h: 7, minW: 3, minH: 4 }, // FLOW MONITOR (Isi sisa area kanan bawah)
+  { i: "flow-monitor", x: 7, y: 5, w: 5, h: 7, minW: 3, minH: 4 }, // FLOW MONITOR (Kembali ke lebar 5)
 ];
 
 type Persisted = { layouts: PanelLayout[]; hidden: string[] };
