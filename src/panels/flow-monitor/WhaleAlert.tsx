@@ -43,6 +43,7 @@ export default function WhaleAlert() {
   // FIX: Pindahkan logic fetch ke luar useCallback dependency solPrice 
   // agar WebSocket tidak reconnect terus menerus.
   const processTransaction = async (signature: string) => {
+    if (!signature) return;
     try {
       console.log(`[Whale] Analyzing TX: ${signature}...`);
       const response = await fetch(
@@ -65,36 +66,45 @@ export default function WhaleAlert() {
 
       const currentSolPrice = usePriceStore.getState().tokens[SOL_MINT.toLowerCase()]?.priceUsd || 200;
       const tokenTransfer = tx.tokenTransfers?.find((t: any) => t.mint !== SOL_MINT);
-      const nativeTransfer = tx.nativeTransfers?.find((n: any) => n.amount > 1e7); // Minimal 0.01 SOL
+      const nativeTransfer = tx.nativeTransfers?.find((n: any) => n.amount > 5e6); // Minimal 0.005 SOL
       
       const mint = tokenTransfer?.mint || SOL_MINT;
       const snap = usePriceStore.getState().tokens[mint.toLowerCase()];
-      const mcap = snap?.marketCap || 0;
+      const mcap = snap?.marketCap || snap?.fdv || 0;
       const tokenSym = snap?.symbol || tokenTransfer?.symbol || "TOKEN";
 
       let amountUsd = 0;
       if (nativeTransfer) {
         amountUsd = (nativeTransfer.amount / 1e9) * currentSolPrice;
       } else if (tokenTransfer) {
-        amountUsd = (tokenTransfer.tokenAmount || 0) * (snap?.priceUsd || 0);
+        // Fallback: Jika harga koin ga ada di store (koin baru), coba estimasi dari SOL
+        const price = snap?.priceUsd || 0;
+        amountUsd = (tokenTransfer.tokenAmount || 0) * price;
+        
+        // Jika masih 0, kita pakai estimasi kasar dari native transfer yang terjadi di TX yang sama
+        if (amountUsd === 0 && tx.nativeTransfers?.[0]) {
+          amountUsd = (tx.nativeTransfers[0].amount / 1e9) * currentSolPrice;
+        }
       }
 
-      console.log(`[Whale] TX Value: ${formatUsd(amountUsd)} | Token: ${tokenSym}`);
-
-      if (amountUsd >= 1000) {
+      // Threshold disesuaikan ke $100 dulu untuk testing agar data cepat muncul
+      if (amountUsd >= 100) {
+        console.log(`[Whale] Paus Terdeteksi: ${tokenSym} | ${formatUsd(amountUsd)}`);
         const ratio = mcap > 0 ? amountUsd / mcap : 0;
         let impactLabel: "WHALE" | "ACCUM" | "MID" = "MID";
         
-        if (ratio > 0.005 || amountUsd > 15000) impactLabel = "WHALE"; 
-        else if (amountUsd > 2500) impactLabel = "ACCUM";
+        if (ratio > 0.005 || amountUsd > 5000) impactLabel = "WHALE"; 
+        else if (amountUsd > 500) impactLabel = "ACCUM";
 
         // BUY/SELL Detection: Cek arah native transfer (SOL)
+        // Jika user nerima SOL, berarti dia SELL token.
         const isSell = tx.nativeTransfers?.some((n: any) => n.toUserAccount === tx.feePayer);
+        const txType = isSell ? "SELL" : "BUY";
 
         const newTx: WhaleTx = {
           id: signature,
           token: tokenSym,
-          type: isSell ? "SELL" : "BUY",
+          type: txType,
           amount: amountUsd,
           wallet: formatAddress(tx.feePayer),
           age: "NOW",
@@ -105,7 +115,7 @@ export default function WhaleAlert() {
         };
 
         setAlerts(prev => [newTx, ...prev].slice(0, 40));
-        trackWhale(tx.feePayer, impactLabel, { token: tokenSym, amountUsd, type: newTx.type });
+        trackWhale(tx.feePayer, impactLabel, { token: tokenSym, amountUsd, type: txType });
         if (impactLabel === "WHALE") trackSignal("BULLISH_WHALE", tokenSym);
       }
     } catch (err) {
@@ -155,14 +165,15 @@ export default function WhaleAlert() {
           const logs = response.params.result.value.logs as string[];
           const signature = response.params.result.value.signature;
           
-          // Filter logs yang lebih luas agar paus nggak lolos
+          // Filter log swap yang lebih komprehensif
           const isSwap = logs.some(l => 
-            l.includes('Instruction: Swap') || 
-            l.includes('Instruction: Route') || 
-            l.includes('Program log: Buy')
+            l.includes('Program log: Instruction: Swap') || 
+            l.includes('Program log: Instruction: Route') ||
+            l.includes('Program log: Buy') ||
+            l.includes('Program log: Sell')
           );
           
-          if (isSwap) processTransaction(signature);
+          if (isSwap && signature) processTransaction(signature);
         }
       } catch (err) { console.error("WS Parse Error", err); }
     };
