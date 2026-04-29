@@ -44,7 +44,7 @@ export default function FlowMonitor() {
             LIVE FEED: {activeTab === "whale" ? "HELIUS WS" : "DEXSCREENER"}
           </div>
           <div className={styles.latency}>
-            {activeTab === "whale" ? "THRESHOLD: >$100 (REAL-TIME)" : "WINDOW: 5M / REFRESH: 5M"}
+            {activeTab === "whale" ? "DETECTOR: >$500 (TEST) | WINDOW: 30S" : "WINDOW: 5M / REFRESH: 5M"}
           </div>
         </div>
       </div>
