@@ -1,7 +1,8 @@
 import { useEffect, useState, useRef, useCallback } from "react";
 import { CONFIG } from "@/core/config";
 import { usePriceStore } from "@/core/store/price.store";
-import { formatAddress, formatUsd } from "@/utils/format";
+import { formatAddress, formatUsd, formatCompact } from "@/utils/format";
+import { trackWhale, trackSignal } from "@/core/analytics";
 import ShareButton from "@/components/ShareButton";
 import styles from "./FlowMonitor.module.css";
 
@@ -39,22 +40,11 @@ export default function WhaleAlert() {
     (s) => s.tokens[SOL_MINT.toLowerCase()]?.priceUsd || 86
   );
 
-  // Mock Data Generator (Keep for offline)
-  const generateMock = (): WhaleTx => ({
-    id: Math.random().toString(36).substr(2, 9),
-    token: ["SOL", "JUP", "RAY", "BONK", "TRUMP"][Math.floor(Math.random() * 5)],
-    type: Math.random() > 0.5 ? "BUY" : "SELL",
-    amount: 5000 + Math.random() * 150000,
-    wallet: "7xKX...v9Wp",
-    age: "2m",
-    mcap: 1000000,
-    impact: "ACCUM",
-    signature: "5UzB...3xYz",
-    timestamp: Date.now(),
-  });
-
-  const fetchTransactionDetail = useCallback(async (signature: string) => {
+  // FIX: Pindahkan logic fetch ke luar useCallback dependency solPrice 
+  // agar WebSocket tidak reconnect terus menerus.
+  const processTransaction = async (signature: string) => {
     try {
+      console.log(`[Whale] Analyzing TX: ${signature}...`);
       const response = await fetch(
         `https://api.helius.xyz/v0/transactions/?api-key=${CONFIG.HELIUS_API_KEY}`,
         {
@@ -63,48 +53,48 @@ export default function WhaleAlert() {
           body: JSON.stringify({ transactions: [signature] })
         }
       );
+      
+      if (response.status === 429) {
+        console.warn("[Whale] Helius API Rate Limited! ⚠️");
+        return;
+      }
+
       const data = await response.json();
       const tx = data[0];
       if (!tx) return;
 
-      // Ambil SOL price paling fresh dari store saat fungsi dipanggil
       const currentSolPrice = usePriceStore.getState().tokens[SOL_MINT.toLowerCase()]?.priceUsd || 200;
-      
       const tokenTransfer = tx.tokenTransfers?.find((t: any) => t.mint !== SOL_MINT);
-      const nativeTransfer = tx.nativeTransfers?.[0];
+      const nativeTransfer = tx.nativeTransfers?.find((n: any) => n.amount > 1e7); // Minimal 0.01 SOL
       
       const mint = tokenTransfer?.mint || SOL_MINT;
       const snap = usePriceStore.getState().tokens[mint.toLowerCase()];
-      
-      // Mcap Detection
-      const mcap = snap?.marketCap || snap?.fdv || 0;
-      const tokenSym = snap?.symbol || "SOL";
+      const mcap = snap?.marketCap || 0;
+      const tokenSym = snap?.symbol || tokenTransfer?.symbol || "TOKEN";
 
       let amountUsd = 0;
-      
-      // PRIORITAS: Pake nilai SOL yang ditransaksikan buat dapet USD value paling akurat buat koin micin
       if (nativeTransfer) {
         amountUsd = (nativeTransfer.amount / 1e9) * currentSolPrice;
       } else if (tokenTransfer) {
-        const price = snap?.priceUsd || 0;
-        amountUsd = (tokenTransfer.tokenAmount || 0) * price;
+        amountUsd = (tokenTransfer.tokenAmount || 0) * (snap?.priceUsd || 0);
       }
 
-      // Threshold diturunkan ke $500 sesuai permintaan untuk koin baru
-      if (amountUsd > 500) {
+      console.log(`[Whale] TX Value: ${formatUsd(amountUsd)} | Token: ${tokenSym}`);
+
+      if (amountUsd >= 1000) {
         const ratio = mcap > 0 ? amountUsd / mcap : 0;
         let impactLabel: "WHALE" | "ACCUM" | "MID" = "MID";
         
-        // Logic Persepsi: 
-        // WHALE: Beli > 1% dari total Market Cap
-        // ACCUM: Beli nominal besar (> $1000) tapi cap sudah gede
-        if (ratio > 0.01) impactLabel = "WHALE"; 
-        else if (amountUsd > 1000) impactLabel = "ACCUM";
+        if (ratio > 0.005 || amountUsd > 15000) impactLabel = "WHALE"; 
+        else if (amountUsd > 2500) impactLabel = "ACCUM";
+
+        // BUY/SELL Detection: Cek arah native transfer (SOL)
+        const isSell = tx.nativeTransfers?.some((n: any) => n.toUserAccount === tx.feePayer);
 
         const newTx: WhaleTx = {
           id: signature,
           token: tokenSym,
-          type: tx.type === "SELL" ? "SELL" : "BUY",
+          type: isSell ? "SELL" : "BUY",
           amount: amountUsd,
           wallet: formatAddress(tx.feePayer),
           age: "NOW",
@@ -113,12 +103,15 @@ export default function WhaleAlert() {
           signature,
           timestamp: Date.now()
         };
+
         setAlerts(prev => [newTx, ...prev].slice(0, 40));
+        trackWhale(tx.feePayer, impactLabel, { token: tokenSym, amountUsd, type: newTx.type });
+        if (impactLabel === "WHALE") trackSignal("BULLISH_WHALE", tokenSym);
       }
     } catch (err) {
-      console.error("Helius Detail Fetch Error", err);
+      console.error("[Whale] Process Error:", err);
     }
-  }, [solPrice]);
+  };
 
   const connectWebSocket = useCallback(() => {
     if (!CONFIG.HELIUS_API_KEY) return;
@@ -161,8 +154,15 @@ export default function WhaleAlert() {
         if (response.params?.result?.value?.logs) {
           const logs = response.params.result.value.logs as string[];
           const signature = response.params.result.value.signature;
-          const isSwap = logs.some(l => l.includes('Swap') || l.includes('Buy'));
-          if (isSwap) fetchTransactionDetail(signature);
+          
+          // Filter logs yang lebih luas agar paus nggak lolos
+          const isSwap = logs.some(l => 
+            l.includes('Instruction: Swap') || 
+            l.includes('Instruction: Route') || 
+            l.includes('Program log: Buy')
+          );
+          
+          if (isSwap) processTransaction(signature);
         }
       } catch (err) { console.error("WS Parse Error", err); }
     };
@@ -172,16 +172,9 @@ export default function WhaleAlert() {
       setWsStatus("RECONNECTING");
       reconnectTimeoutRef.current = setTimeout(connectWebSocket, 5000);
     };
-  }, [fetchTransactionDetail]); // fetchTransactionDetail sekarang stable
+  }, []); // Kosongkan dependency agar koneksi WS stabil
 
   useEffect(() => {
-    if (!CONFIG.HELIUS_API_KEY) {
-      const interval = setInterval(() => {
-        setAlerts(prev => [generateMock(), ...prev].slice(0, 50));
-      }, 4000);
-      return () => clearInterval(interval);
-    }
-
     connectWebSocket();
     return () => {
       if (wsRef.current) {

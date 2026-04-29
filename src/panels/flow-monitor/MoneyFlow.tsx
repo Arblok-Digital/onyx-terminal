@@ -4,6 +4,7 @@ import { subscribePrices, getLatestProfiles } from "@/feeds/dexscreener";
 import { usePriceList } from "@/hooks/usePrice";
 import { usePriceStore } from "@/core/store/price.store";
 import { bus } from "@/core/event-bus";
+import { trackUserEvent, trackSwap } from "@/core/analytics";
 import ShareButton from "@/components/ShareButton";
 import styles from "./FlowMonitor.module.css";
 
@@ -131,11 +132,18 @@ export default function MoneyFlow() {
               <tr 
                 key={f.address} 
                 className={styles.row}
-                onClick={() => bus.emit("token:select", { 
-                  address: f.address, 
-                  symbol: f.symbol,
-                  chain: f.chain 
-                })}
+                onClick={() => {
+                  bus.emit("token:select", { 
+                    address: f.address, 
+                    symbol: f.symbol,
+                    chain: f.chain 
+                  });
+                  
+                  // STEP 6: Track user klik koin apa
+                  trackUserEvent("token_inspect", { symbol: f.symbol, address: f.address });
+                  // Test trackSwap (Nanti pindahin ke komponen Swap beneran)
+                  trackSwap("SOL", f.symbol, 1.5);
+                }}
               >
               <td className={styles.bold}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>

@@ -11,6 +11,10 @@ export const CONFIG = {
   HELIUS_API_KEY: import.meta.env.VITE_HELIUS_API_KEY || "6aa38557-de0e-43c2-a65c-c7cc113d0e33",
   BIRDEYE_API_KEY: import.meta.env.VITE_BIRDEYE_API_KEY || "",
 
+  // Supabase
+  SUPABASE_URL: import.meta.env.VITE_SUPABASE_URL || "",
+  SUPABASE_ANON_KEY: import.meta.env.VITE_SUPABASE_ANON_KEY || "",
+
   // API Endpoints
   HELIUS_RPC: (key: string) => `https://mainnet.helius-rpc.com/?api-key=${key}`,
   BIRDEYE_API_URL: "https://public-api.birdeye.so",
