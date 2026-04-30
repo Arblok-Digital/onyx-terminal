@@ -6,7 +6,7 @@
  * @exposes default Ticker
  * @deps hooks/usePrice, panels/watchlist/watchlist.store, core/event-bus
  */
-import { useMemo } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { useWatchlistStore } from "@/panels/watchlist/watchlist.store";
 import { usePriceFor, useTopMovers } from "@/hooks/usePrice";
 import { bus } from "@/core/event-bus";
@@ -24,6 +24,18 @@ export default function Ticker() {
     (m) => m.address.toLowerCase() !== SOL_MINT.toLowerCase(),
   );
 
+  // Network Metrics Dummy (Update tiap 3 detik)
+  const [tps, setTps] = useState(2840);
+  const [fee, setFee] = useState(0.000005);
+
+  useEffect(() => {
+    const id = setInterval(() => {
+      setTps(2800 + Math.floor(Math.random() * 400));
+      setFee(0.000005 + (Math.random() * 0.00001));
+    }, 3000);
+    return () => clearInterval(id);
+  }, []);
+
   const select = (address: string, chain: string, symbol?: string) => {
     bus.emit("token:select", { address, chain, symbol });
   };
@@ -35,6 +47,30 @@ export default function Ticker() {
         <div>
           <div className={styles.brandName}>ONYX</div>
           <div className={styles.brandSub}>Terminal</div>
+        </div>
+      </div>
+
+      <div className={styles.divider} />
+
+      {/* Solana Network Health Stats */}
+      <div style={{ display: 'flex', gap: '12px', alignItems: 'center', padding: '0 10px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column' }}>
+          <span style={{ fontSize: '8px', color: '#6b7280', fontWeight: 'bold' }}>SOL TPS</span>
+          <span style={{ fontSize: '10px', color: '#2ecc71', fontFamily: 'monospace' }}>
+            {tps.toLocaleString()}
+          </span>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column' }}>
+          <span style={{ fontSize: '8px', color: '#6b7280', fontWeight: 'bold' }}>NET FEE</span>
+          <span style={{ fontSize: '10px', color: '#f39c12', fontFamily: 'monospace' }}>
+            {fee.toFixed(6)}
+          </span>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column' }}>
+          <span style={{ fontSize: '8px', color: '#6b7280', fontWeight: 'bold' }}>HELIUS</span>
+          <span style={{ fontSize: '10px', color: '#3b82f6', fontFamily: 'monospace' }}>
+            CONNECTED
+          </span>
         </div>
       </div>
 

@@ -11,6 +11,7 @@ import { usePriceStore } from "@/core/store/price.store";
 import type { ChainId } from "@/core/store/price.store";
 import { CHAIN_LABELS } from "@/utils/chain";
 import { formatClock, formatLatency, formatRelative } from "@/utils/time";
+import { formatCompact, formatUsd } from "@/utils/format";
 import styles from "./StatusBar.module.css";
 
 const CHAINS: ChainId[] = ["solana", "ethereum", "base", "arbitrum"];
@@ -40,6 +41,11 @@ export default function StatusBar() {
       : status === "degraded"
         ? styles.dotDegraded
         : styles.dotOffline;
+
+  // Dummy live metrics yang berfluktuasi berdasarkan state 'now'
+  const dummyUsers = 1240 + (Math.floor(now / 15000) % 45);
+  const dummyTrades = 48200 + (Math.floor(now / 5000) % 210);
+  const dummyVol = 12450000 + (Math.floor(now / 2000) % 9500);
 
   return (
     <div className={styles.bar} role="status">
@@ -79,6 +85,23 @@ export default function StatusBar() {
       <div className={styles.cell}>
         <span className={styles.label}>Last</span>
         <span className={styles.value}>{formatRelative(lastRefresh, now)}</span>
+      </div>
+
+      <div className={styles.divider} />
+
+      <div className={styles.cell}>
+        <span className={styles.label}>Users</span>
+        <span className={styles.value} style={{ color: '#2ecc71' }}>{formatCompact(dummyUsers)}</span>
+      </div>
+
+      <div className={styles.cell}>
+        <span className={styles.label}>Trades</span>
+        <span className={styles.value}>{formatCompact(dummyTrades)}</span>
+      </div>
+
+      <div className={styles.cell}>
+        <span className={styles.label}>24h Vol</span>
+        <span className={styles.value} style={{ color: '#3b82f6' }}>{formatUsd(dummyVol)}</span>
       </div>
 
       <div className={styles.spacer} />
