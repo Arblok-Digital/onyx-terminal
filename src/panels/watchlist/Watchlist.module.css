@@ -62,17 +62,20 @@
 }
 
 .thead {
-  display: grid;
-  grid-template-columns: 1fr 80px 70px 70px 80px 24px;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: grid; /* Desktop layout */
+  grid-template-columns: minmax(150px, 1fr) 80px 70px 70px 80px 24px; /* Token (min 150px, then flexible), Price, 1H, 24H, Vol, RemoveBtn */
   gap: 4px;
-  padding: 6px 10px;
+  padding: 7px 10px; /* Samakan dengan padding .row agar sejajar sempurna */
   font-size: 10px;
   font-weight: 500;
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: var(--text-muted);
   border-bottom: 1px solid var(--border);
-  background: var(--bg-panel);
+  background: var(--bg-panel); /* Pastikan background opaque agar row tidak terlihat saat scroll di bawah header */
 }
 
 .th {
@@ -112,8 +115,8 @@
 }
 
 .row {
-  display: grid;
-  grid-template-columns: 1fr 80px 70px 70px 80px 24px;
+  display: grid; /* Desktop layout */
+  grid-template-columns: minmax(150px, 1fr) 80px 70px 70px 80px 24px; /* Token (min 150px, then flexible), Price, 1H, 24H, Vol, RemoveBtn */
   gap: 4px;
   align-items: center;
   padding: 7px 10px;

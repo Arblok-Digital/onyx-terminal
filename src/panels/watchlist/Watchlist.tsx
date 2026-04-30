@@ -141,28 +141,29 @@ export default function Watchlist() {
           )}
         </div>
 
-        <div className={styles.thead}>
-          {COLUMNS.map((col) => (
-            <div
-              key={col.id}
-              className={[
-                styles.th,
-                col.numeric ? styles.thNumeric : "",
-                sortBy === col.id ? styles.thActive : "",
-                !col.essential ? styles.hideMobile : ""
-              ].join(" ")}
-              onClick={() => setSort(col.id)}
-            >
-              <span>{col.label}</span>
-              {sortBy === col.id && (
-                <span>{sortDir === "desc" ? "▼" : "▲"}</span>
-              )}
-            </div>
-          ))}
-          <div />
-        </div>
-
         <div className={styles.rows}>
+          {/* Header dipindahkan ke sini agar sejajar dengan scrollbar rows */}
+          <div className={styles.thead}>
+            {COLUMNS.map((col) => (
+              <div
+                key={col.id}
+                className={[
+                  styles.th,
+                  col.numeric ? styles.thNumeric : "",
+                  sortBy === col.id ? styles.thActive : "",
+                  !col.essential ? styles.hideMobile : ""
+                ].join(" ")}
+                onClick={() => setSort(col.id)}
+              >
+                <span>{col.label}</span>
+                {sortBy === col.id && (
+                  <span>{sortDir === "desc" ? "▼" : "▲"}</span>
+                )}
+              </div>
+            ))}
+            <div />
+          </div>
+
           {sorted.length === 0 ? (
             <div className={styles.empty}>
               Watchlist kosong. Tekan + buat tambah token.

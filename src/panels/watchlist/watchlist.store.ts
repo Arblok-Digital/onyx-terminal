@@ -23,7 +23,8 @@ const SEED: WatchEntry[] = [
   { address: "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263", chain: "solana" }, // BONK
   { address: "EKpQGSJtjMFqKZ9KQanSqYXRcF8fBopzLHYxdM65zcjm", chain: "solana" }, // WIF
   { address: "JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN", chain: "solana" }, // JUP
-  { address: "HZ1JovNiVvGrGNiiYvEozEVgZ58xaU3RKwX8eACQBCt3", chain: "solana" }, // PYTH
+  { address: "9BB6N7ARoBvnRpk4mS5MksvX5ZnyS2rY7Rtu7vD7pump", chain: "solana" }, // FARTCOIN
+  { address: "CPs956oJitN8C1v2P1aV2Q4Cg6C9z6k4e3z1S6Ghpump", chain: "solana" }, // PENGU
 ];
 
 type State = {
@@ -39,6 +40,7 @@ type Actions = {
   remove: (address: string) => void;
   has: (address: string) => boolean;
   setSort: (field: State["sortBy"], dir?: State["sortDir"]) => void;
+  reset: () => void;
 };
 
 function loadInitial(): WatchEntry[] {
@@ -84,5 +86,10 @@ export const useWatchlistStore = create<State & Actions>((set, get) => ({
     const nextDir =
       dir ?? (cur.sortBy === field && cur.sortDir === "desc" ? "asc" : "desc");
     set({ sortBy: field, sortDir: nextDir });
+  },
+
+  reset: () => {
+    set({ entries: SEED, sortBy: "default", sortDir: "desc" });
+    persist(SEED);
   },
 }));

@@ -2,7 +2,7 @@ import { useEffect, useState, useMemo } from "react";
 import { usePriceStore } from "@/core/store/price.store";
 import { bus } from "@/core/event-bus";
 import { formatUsd } from "@/utils/format";
-import { trackSignal, trackUserEvent } from "@/core/analytics";
+import { trackUserEvent } from "@/core/analytics";
 import styles from "./FlowMonitor.module.css";
 
 interface WhaleTx {
@@ -97,7 +97,7 @@ export default function WhaleAlert() {
               >
               <td className={styles.bold}>{tx.token}</td>
               <td>
-                <span className={tx.signal === "WHALE ENTRY" || tx.signal === "ACCUMULATION" ? styles.textGreen : styles.textRed}>
+                <span className={tx.signal === "WHALE ENTRY" || tx.signal === "ACCUMULATION" || tx.signal === "MOMENTUM" ? styles.textGreen : styles.textRed}>
                   {tx.signal}
                 </span>
               </td>
@@ -114,7 +114,7 @@ export default function WhaleAlert() {
           ))}
           {alerts.length === 0 && (
             <tr>
-              <td colSpan={6} className={styles.empty}>
+              <td colSpan={5} className={styles.empty}>
                 Scanning market patterns...
               </td>
             </tr>
