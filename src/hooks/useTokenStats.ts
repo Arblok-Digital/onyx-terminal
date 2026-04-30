@@ -18,7 +18,7 @@ export function useTokenStats(address?: string) {
 
     const fetchStats = async () => {
       try {
-        // 1. Fetch Real Transaction Data dari DexScreener
+        // --- STEP 1: DexScreener (Transaction Volumes & Basic Holders) ---
         const dexRes = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${address}`);
         const dexData = await dexRes.json();
         const pair = dexData.pairs?.[0];
@@ -27,10 +27,10 @@ export function useTokenStats(address?: string) {
           const txns = pair.txns?.h24 || { buys: 0, sells: 0 };
           const volume = pair.volume?.h24 || 0;
 
-          // 2. Fetch On-chain Data dari Helius
+          // --- STEP 2: Helius RPC (On-chain Distribution) ---
           const rpcUrl = `https://mainnet.helius-rpc.com/?api-key=${CONFIG.HELIUS_API_KEY}`;
           
-          const [supplyRes, largestAccRes] = await Promise.all([
+          const [supplyRes, largestAccountsRes] = await Promise.all([
             fetch(rpcUrl, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
@@ -44,7 +44,7 @@ export function useTokenStats(address?: string) {
           ]);
 
           const supplyData = await supplyRes.json();
-          const holdersData = await largestAccRes.json();
+          const holdersData = await largestAccountsRes.json();
 
           const totalSupply = parseFloat(supplyData.result?.value?.amount || "0");
           const largestAccounts = holdersData.result?.value || [];
@@ -56,9 +56,8 @@ export function useTokenStats(address?: string) {
 
           const distributionRatio = totalSupply > 0 ? (top10Supply / totalSupply) * 100 : 0;
 
-          // 3. Gabungkan data
+          // --- STEP 3: Final Aggregation ---
           setStats({
-            // Fallback: Jika DexScreener belum index holder, tulis N/A (Data On-chain di Solana butuh Indexer khusus untuk jumlah total)
             holders: pair.info?.holders ? pair.info.holders.toLocaleString() : "N/A", 
             txns24h: (txns.buys + txns.sells).toLocaleString(),
             buys24h: txns.buys,

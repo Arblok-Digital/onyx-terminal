@@ -9,6 +9,7 @@
 import { useMemo, useState, useEffect } from "react";
 import { useWatchlistStore } from "@/panels/watchlist/watchlist.store";
 import { usePriceFor, useTopMovers } from "@/hooks/usePrice";
+import { usePriceStore } from "@/core/store/price.store";
 import { bus } from "@/core/event-bus";
 import { formatPrice, formatPercent } from "@/utils/format";
 import styles from "./Ticker.module.css";
@@ -18,6 +19,23 @@ const SOL_MINT = "So11111111111111111111111111111111111111112";
 export default function Ticker() {
   const entries = useWatchlistStore((s) => s.entries);
   const sol = usePriceFor(SOL_MINT);
+  const allTokens = usePriceStore((s) => s.tokens);
+
+  // Kalkulasi Market Sentiment (Bull/Bear Index)
+  const marketSentiment = useMemo(() => {
+    const tokens = Object.values(allTokens);
+    if (tokens.length === 0) return { label: 'NEUTRAL', score: 0 };
+    
+    // Ambil rata-rata perubahan 1 jam dari semua koin yang dipantau (terutama trending)
+    const avgChange = tokens.reduce((sum, t) => sum + (t.priceChange1h || 0), 0) / tokens.length;
+    
+    if (avgChange > 3) return { label: 'EXTREME BULL', color: '#2ecc71', score: avgChange };
+    if (avgChange > 0.5) return { label: 'BULLISH', color: '#27ae60', score: avgChange };
+    if (avgChange < -3) return { label: 'EXTREME BEAR', color: '#e74c3c', score: avgChange };
+    if (avgChange < -0.5) return { label: 'BEARISH', color: '#c0392b', score: avgChange };
+    
+    return { label: 'NEUTRAL', color: '#95a5a6', score: avgChange };
+  }, [allTokens]);
 
   const watchedAddrs = useMemo(() => entries.map((e) => e.address), [entries]);
   const movers = useTopMovers(watchedAddrs, 6).filter(
@@ -51,6 +69,14 @@ export default function Ticker() {
       </div>
 
       <div className={styles.divider} />
+
+      {/* Market Sentiment Index */}
+      <div style={{ display: 'flex', flexDirection: 'column', minWidth: '80px', padding: '0 10px' }}>
+        <span style={{ fontSize: '8px', color: '#6b7280', fontWeight: 'bold' }}>SENTIMENT</span>
+        <span style={{ fontSize: '10px', color: marketSentiment.color, fontWeight: 'bold' }}>
+          {marketSentiment.label}
+        </span>
+      </div>
 
       {/* Solana Network Health Stats */}
       <div style={{ display: 'flex', gap: '12px', alignItems: 'center', padding: '0 10px' }}>

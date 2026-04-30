@@ -27,7 +27,7 @@ import { useWatchlistStore } from "@/panels/watchlist/watchlist.store";
 import { bus } from "@/core/event-bus";
 import { useUIStore } from "@/core/store/ui.store";
 import { usePriceStore } from "@/core/store/price.store";
-import { subscribePrices } from "@/feeds/dexscreener";
+import { subscribePrices, getLatestProfiles } from "@/feeds/dexscreener";
 import styles from "./Terminal.module.css";
 
 const ResponsiveGrid = WidthProvider(GridLayout);
@@ -41,6 +41,18 @@ export default function Terminal() {
   const activeToken = useUIStore((s) => s.activeToken);
   const mobileTab = useLayoutStore((s) => s.mobileTab);
   const setMobileTab = useLayoutStore((s) => s.setMobileTab);
+
+  // State untuk menyimpan daftar koin "Mecin" trending sebagai indikator market
+  const [marketIndexMints, setMarketIndexMints] = useState<string[]>([]);
+
+  useEffect(() => {
+    // Ambil 10 koin terbaru/trending di Solana untuk indikator Bull/Bear
+    getLatestProfiles().then(profiles => {
+      const solMints = profiles.filter(p => p.chainId === 'solana').slice(0, 10).map(p => p.tokenAddress);
+      setMarketIndexMints(solMints);
+      console.log("Onyx Index Mints Loaded:", solMints.length);
+    });
+  }, []);
 
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   // Local state untuk handle layout trade di mobile agar bisa di-resize dengan lancar
@@ -100,10 +112,10 @@ export default function Terminal() {
   // Subscribe to price feed
   useEffect(() => {
     const unsub = subscribePrices(() =>
-      entriesRef.current.map((e) => e.address),
+      Array.from(new Set([...entriesRef.current.map((e) => e.address), ...marketIndexMints]))
     );
     return unsub;
-  }, []);
+  }, [marketIndexMints]);
 
   // Auto-select first watchlist token once prices land
   useEffect(() => {

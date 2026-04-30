@@ -29,12 +29,13 @@ import {
 } from "./discover.config";
 import styles from "./Discover.module.css";
 
-type Tab = "listings" | "signals";
+type Tab = "listings" | "signals" | "trending";
 
 const SHARE_URL = "https://onyx-terminal-v1.vercel.app";
 
 export default function Discover() {
   const [profiles, setProfiles] = useState<TokenProfile[]>([]);
+  const [trendingProfiles, setTrendingProfiles] = useState<TokenProfile[]>([]);
   const [tab, setTab] = useState<Tab>("listings");
   const [chain, setChain] = useState<(typeof CHAIN_FILTERS)[number]["id"]>("all");
   const [loading, setLoading] = useState(true);
@@ -50,17 +51,41 @@ export default function Discover() {
 
     async function tick() {
       try {
-        const list = await getLatestProfiles();
+        // Pipeline: Fetch data listings dan trending secara independen
+        // Pakai .catch biar kalau salah satu gagal, yang lain tetep jalan
+        const [list, trending] = await Promise.all([
+          getLatestProfiles().catch(() => []),
+          fetch("https://api.dexscreener.com/token-boosts/top/v1").then(res => res.json()).catch(() => [])
+        ]);
+
         if (stopped) return;
-        const trimmed = list.slice(0, MAX_ROWS);
-        setProfiles(trimmed);
-        // Enrich in batches of 30 (API limit)
-        const addrs = trimmed.map((p) => p.tokenAddress);
+
+        // Arsitektur: Ekstraksi data Trending yang lebih aman
+        const trendingArr = Array.isArray(trending) ? trending : (trending?.boosts || []);
+        const trimmedList = Array.isArray(list) ? list.slice(0, MAX_ROWS) : [];
+        const trimmedTrending = trendingArr.slice(0, MAX_ROWS);
+
+        // Update metadata profiles segera
+        setProfiles(trimmedList);
+        setTrendingProfiles(trimmedTrending);
+
+        // Pipeline: Konsolidasi alamat untuk Enrichment (Market Data)
+        // Kita ambil semua (up to 60) karena batch fetch sanggup handle
+        const allProfiles = [...trimmedList, ...trimmedTrending];
+        const addrs = Array.from(new Set(
+          allProfiles.map(p => p?.tokenAddress).filter(Boolean)
+        )).slice(0, 60); 
+
         if (addrs.length > 0) {
           try {
-            const snaps = await getTokensBatch(addrs);
-            if (!stopped && snaps.length > 0) {
-              usePriceStore.getState().upsertMany(snaps);
+            // Pecah batch jika terlalu besar (opsional, tapi 60 biasanya aman)
+            const snaps = await getTokensBatch(addrs.slice(0, 30));
+            const snaps2 = addrs.length > 30 ? await getTokensBatch(addrs.slice(30, 60)) : [];
+            
+            const combinedSnaps = [...snaps, ...snaps2];
+
+            if (!stopped && combinedSnaps.length > 0) {
+              usePriceStore.getState().upsertMany(combinedSnaps);
             }
           } catch {
             /* enrichment failure ok — list still renders with partial data */
@@ -86,13 +111,20 @@ export default function Discover() {
   // Build hydrated rows (snap + profile metadata) filtered by chain
   type Row = { profile: TokenProfile; snap: TokenSnapshot | undefined };
   const rows = useMemo<Row[]>(() => {
-    return profiles
-      .filter((p) => chain === "all" || normalizeChain(p.chainId) === chain)
+    const source = tab === "trending" ? trendingProfiles : profiles;
+    if (!source || !Array.isArray(source)) return [];
+
+    return source
+      .filter((p) => {
+        if (!p || !p.tokenAddress) return false;
+        const ch = normalizeChain(p.chainId);
+        return chain === "all" || ch === chain;
+      })
       .map((p) => ({
         profile: p,
         snap: tokens[p.tokenAddress.toLowerCase()],
       }));
-  }, [profiles, tokens, chain]);
+  }, [profiles, trendingProfiles, tokens, chain, tab]);
 
   const signalRows = useMemo(() => {
     return rows
@@ -112,10 +144,14 @@ export default function Discover() {
     : "—";
 
   const totalLabel =
-    tab === "listings" ? `${rows.length} listings` : `${signalRows.length} scored`;
+    tab === "signals" 
+      ? `${signalRows.length} scored` 
+      : `${rows.length} ${tab === "trending" ? "trending" : "listings"}`;
+
+  const panelBadge = tab === "listings" ? "NEW" : tab === "trending" ? "HOT" : "SIGNAL";
 
   return (
-    <Panel id="discover" title="Discover" badge={tab === "listings" ? "NEW" : "SIGNAL"}>
+    <Panel id="discover" title="Discover" badge={panelBadge}>
       <div className={styles.body}>
         <div className={styles.toolbar}>
           <div className={styles.tabs}>
@@ -124,6 +160,12 @@ export default function Discover() {
               onClick={() => setTab("listings")}
             >
               ◉ NEW LISTINGS
+            </button>
+            <button
+              className={`${styles.tab} ${tab === "trending" ? styles.tabActive : ""}`}
+              onClick={() => setTab("trending")}
+            >
+              🔥 TRENDING
             </button>
             <button
               className={`${styles.tab} ${tab === "signals" ? styles.tabActive : ""}`}
@@ -147,7 +189,7 @@ export default function Discover() {
         </div>
 
         <div className={styles.tableWrap}>
-          {tab === "listings" ? (
+          {tab === "listings" || tab === "trending" ? (
             <ListingsTable rows={rows} onSelect={handleSelect} activeAddr={activeAddr} />
           ) : (
             <SignalsTable
