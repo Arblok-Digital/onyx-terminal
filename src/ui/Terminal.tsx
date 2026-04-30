@@ -43,6 +43,12 @@ export default function Terminal() {
   const setMobileTab = useLayoutStore((s) => s.setMobileTab);
 
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+  // Local state untuk handle layout trade di mobile agar bisa di-resize dengan lancar
+  const [mobileTradeLayout, setMobileTradeLayout] = useState<LayoutItem[]>([
+    { i: "chart", x: 0, y: 0, w: 1, h: 10, minH: 5 },
+    { i: "swap", x: 0, y: 10, w: 1, h: 8, minH: 5 }
+  ]);
+
   useEffect(() => {
     const handleResize = () => setIsMobile(window.innerWidth < 768);
     window.addEventListener("resize", handleResize);
@@ -139,10 +145,25 @@ export default function Terminal() {
             </div>
           )}
           {mobileTab === 'trade' && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              <div style={{ height: '350px' }}><Chart /></div>
-              <Swap />
-            </div>
+            <ResponsiveGrid
+              className="layout"
+              cols={1}
+              rowHeight={42} // Gunakan fixed height yang lebih pas untuk touch target di mobile
+              margin={[0, 8]}
+              isDraggable={false} // Di mobile fokus ke resize saja biar gak geser-geser gak sengaja
+              isResizable={true}
+              draggableHandle=".drag-handle"
+              layout={mobileTradeLayout}
+              onLayoutChange={(current) => setMobileTradeLayout(current as LayoutItem[])}
+              compactType="vertical"
+            >
+              <div key="chart">
+                <Chart />
+              </div>
+              <div key="swap">
+                <Swap />
+              </div>
+            </ResponsiveGrid>
           )}
           {mobileTab === 'flow' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
@@ -151,6 +172,36 @@ export default function Terminal() {
             </div>
           )}
         </div>
+
+        {/* Floating Reset Button for Mobile */}
+        <button
+          onClick={() => {
+            if (confirm("Reset layout to default Bloomberg view?")) {
+              reset();
+              window.location.reload();
+            }
+          }}
+          style={{
+            position: 'fixed',
+            bottom: '80px',
+            right: '12px',
+            zIndex: 3000,
+            background: 'rgba(17, 24, 39, 0.9)',
+            border: '1px solid rgba(59, 130, 246, 0.5)',
+            color: '#3b82f6',
+            width: '40px',
+            height: '40px',
+            borderRadius: '50%',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
+            backdropFilter: 'blur(4px)'
+          }}
+          title="Reset Layout"
+        >
+          <RotateCcw size={18} />
+        </button>
 
         {/* Bottom Navigation Bar */}
         <div style={{
