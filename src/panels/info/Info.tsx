@@ -13,6 +13,7 @@ import { useState } from "react";
 import Panel from "@/ui/Panel";
 import { useUIStore } from "@/core/store/ui.store";
 import ShareButton from "@/components/ShareButton";
+import { useTokenStats } from "@/hooks/useTokenStats";
 import { usePriceFor } from "@/hooks/usePrice";
 import {
   formatPrice,
@@ -121,6 +122,7 @@ function changeClass(v: number | undefined) {
 export default function Info() {
   const activeToken = useUIStore((s) => s.activeToken);
   const snap = usePriceFor(activeToken?.address);
+  const stats = useTokenStats(activeToken?.address);
 
   if (!activeToken) {
     return (
@@ -187,6 +189,15 @@ export default function Info() {
             value={snap.liquidity !== undefined ? formatUsd(snap.liquidity) : "—"}
           />
           <Row label="Chain" value={CHAIN_LABELS[snap.chain]} />
+        <Row
+          label="Top 10 Distribution"
+          value={stats ? `${stats.distributionRatio.toFixed(1)}%` : "—"}
+          valueClass={stats && stats.distributionRatio > 50 ? styles.down : ""}
+        />
+        <Row
+          label="Total Holders"
+          value={stats ? stats.holders : "—"}
+        />
         </Section>
 
         {/* PRICE CHANGE */}
