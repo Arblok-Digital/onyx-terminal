@@ -24,6 +24,7 @@ import FlowMonitor from "@/panels/flow-monitor/FlowMonitor";
 import { useLayout } from "@/hooks/useLayout";
 import { useLayoutStore } from "@/core/store/layout.store";
 import { useWatchlistStore } from "@/panels/watchlist/watchlist.store";
+import { bus } from "@/core/event-bus";
 import { useUIStore } from "@/core/store/ui.store";
 import { usePriceStore } from "@/core/store/price.store";
 import { subscribePrices } from "@/feeds/dexscreener";
@@ -65,6 +66,22 @@ export default function Terminal() {
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
+
+  // Centralized "One-Click" Pipeline: Listen to token selection and switch tab on mobile
+  useEffect(() => {
+    const handleTokenSelect = (token: any) => {
+      setActiveToken(token);
+      // Jika di mobile/PWA, otomatis pindah ke tab TRADE supaya Swap panel kelihatan
+      if (window.innerWidth < 768) {
+        setMobileTab("trade");
+      }
+    };
+
+    bus.on("token:select", handleTokenSelect);
+    return () => {
+      bus.off("token:select", handleTokenSelect);
+    };
+  }, [setActiveToken, setMobileTab]);
 
   // Stable getter so the polling loop always sees the latest watchlist
   const entriesRef = useRef(useWatchlistStore.getState().entries);

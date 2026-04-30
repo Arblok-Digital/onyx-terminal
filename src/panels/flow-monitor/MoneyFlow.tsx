@@ -139,10 +139,8 @@ export default function MoneyFlow() {
                     chain: f.chain 
                   });
                   
-                  // STEP 6: Track user klik koin apa
+                  // Track user klik koin dan arahkan pipeline ke Swap
                   trackUserEvent("token_inspect", { symbol: f.symbol, address: f.address });
-                  // Test trackSwap (Nanti pindahin ke komponen Swap beneran)
-                  trackSwap("SOL", f.symbol, 1.5);
                 }}
               >
               <td className={styles.bold}>

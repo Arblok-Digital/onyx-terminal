@@ -1,13 +1,15 @@
 import { useEffect, useState, useRef, useCallback } from "react";
 import { CONFIG } from "@/core/config";
 import { usePriceStore } from "@/core/store/price.store";
+import { bus } from "@/core/event-bus";
 import { formatAddress, formatUsd, formatCompact } from "@/utils/format";
-import { trackWhale, trackSignal } from "@/core/analytics";
+import { trackWhale, trackSignal, trackUserEvent } from "@/core/analytics";
 import ShareButton from "@/components/ShareButton";
 import styles from "./FlowMonitor.module.css";
 
 interface WhaleTx {
   id: string;
+  address: string;
   token: string;
   netFlow: number;
   buyVolume: number;
@@ -21,6 +23,7 @@ interface WhaleTx {
 interface AggregatedData {
   buyVolume: number;
   sellVolume: number;
+  address: string;
   count: number;
 }
 
@@ -122,11 +125,12 @@ export default function WhaleAlert() {
       const isBuy = tx.nativeTransfers?.some((n: any) => n.fromUserAccount === tx.feePayer);
       
       // 4. Agregasi data per token
-      const current = aggregationMap.current.get(tokenSym) || { buyVolume: 0, sellVolume: 0, count: 0 };
+      const current = aggregationMap.current.get(tokenSym) || { buyVolume: 0, sellVolume: 0, count: 0, address: mint };
       if (isBuy) current.buyVolume += amountUsd;
       else current.sellVolume += amountUsd;
       current.count += 1;
-      
+      current.address = mint; // Update address to ensure we have it
+
       aggregationMap.current.set(tokenSym, current);
       console.log(`[Aggregator] Added ${tokenSym}: +${formatUsd(amountUsd)} (${isBuy ? 'BUY' : 'SELL'})`);
     } catch (err) {
@@ -165,6 +169,7 @@ export default function WhaleAlert() {
 
         newSignals.push({
           id: `${token}-${Date.now()}`,
+          address: data.address,
           token,
           netFlow,
           buyVolume: data.buyVolume,
@@ -291,7 +296,19 @@ export default function WhaleAlert() {
         <tbody>
           {alerts.map((tx) => {
             return (
-              <tr key={tx.id} className={styles.row}>
+              <tr 
+                key={tx.id} 
+                className={styles.row} 
+                style={{ cursor: 'pointer' }}
+                onClick={() => {
+                  bus.emit("token:select", { 
+                    address: tx.address, 
+                    symbol: tx.token,
+                    chain: 'solana'
+                  });
+                  trackUserEvent("whale_inspect", { symbol: tx.token, address: tx.address });
+                }}
+              >
               <td className={styles.bold}>{tx.token}</td>
               <td>
                 <span className={tx.signal.includes("BUY") ? styles.textGreen : styles.textRed}>
