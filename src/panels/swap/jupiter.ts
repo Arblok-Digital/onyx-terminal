@@ -23,7 +23,7 @@ export type JupiterInitProps = {
   /** Referral account pubkey (base58). */
   referralAccount?: string;
   /** Platform fee in basis points (e.g. 50 = 0.50%). */
-  referralFee?: number;
+  platformFeeBps?: number;
   containerStyles?: Record<string, string | number>;
   containerClassName?: string;
 };

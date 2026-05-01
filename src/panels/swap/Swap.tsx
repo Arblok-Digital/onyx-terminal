@@ -49,6 +49,11 @@ export default function Swap() {
         requestAnimationFrame(() => {
           if (cancelled) return;
           try {
+            console.log("Jupiter Fee Config:", {
+              referralAccount: REFERRAL_ACCOUNT,
+              platformFeeBps: REFERRAL_FEE_BPS
+            });
+
             Jupiter.init({
               displayMode: "integrated",
               integratedTargetId: JUP_TARGET_ID,
@@ -59,7 +64,7 @@ export default function Swap() {
                 swapMode: "ExactIn",
               },
               referralAccount: REFERRAL_ACCOUNT,
-              referralFee: REFERRAL_FEE_BPS,
+              platformFeeBps: REFERRAL_FEE_BPS,
             });
             lastInitRef.current = outputMint;
           } catch (e) {
