@@ -29,10 +29,96 @@ export default function Swap() {
   const snap = usePriceFor(activeToken?.address);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [analysis, setAnalysis] = useState<{
+    routeType: "FEE_ACTIVE" | "PARTIAL" | "NO_FEE" | "UNKNOWN";
+    label: string;
+    hops: number;
+  } | null>(null);
   const lastInitRef = useRef<string | null>(null);
 
   const isSolana = activeToken?.chain === "solana";
   const outputMint = isSolana ? activeToken?.address : undefined;
+
+  // Helper function to classify route type based on keywords
+  const classifyRoute = (routePlan: any[]): "FEE_ACTIVE" | "PARTIAL" | "NO_FEE" | "UNKNOWN" => {
+    let hasFeeRoute = false;
+    let hasPump = false;
+    let hasAggregator = false;
+
+    const feeActiveKws = ["raydium", "orca", "meteora", "whirlpool", "clmm", "cpmm", "lifinity", "openbook", "phoenix", "crema"];
+    const partialKws = ["okx", "dflow", "rfq"];
+    const noFeeKws = ["pump", "pumpfun", "bonding"];
+
+    for (const hop of routePlan) {
+      const label = (hop.swapInfo.label || "").toLowerCase();
+      const amm = (hop.swapInfo.ammKey || "").toLowerCase();
+
+      const text = label + " " + amm;
+
+      if (feeActiveKws.some(kw => text.includes(kw))) {
+        hasFeeRoute = true;
+      }
+
+      if (partialKws.some(kw => text.includes(kw))) {
+        hasAggregator = true;
+      }
+
+      if (noFeeKws.some(kw => text.includes(kw))) {
+        hasPump = true;
+      }
+    }
+
+    // Prioritas: NO_FEE > PARTIAL > FEE_ACTIVE > UNKNOWN
+    if (hasPump) return "NO_FEE";
+    if (hasAggregator) return "PARTIAL";
+    if (hasFeeRoute) return "FEE_ACTIVE";
+
+    return "UNKNOWN";
+  };
+
+  // ── Route Analysis Pipeline ───────────────────────────────────────
+  useEffect(() => {
+    if (!outputMint) {
+      setAnalysis(null);
+      return;
+    }
+
+    const analyzeRoute = async () => {
+      try {
+        if (SOL_MINT === outputMint) {
+          throw new Error("Invalid swap pair: same token");
+        }
+
+        const url = `https://api.jup.ag/swap/v1/quote?inputMint=${SOL_MINT}&outputMint=${outputMint}&amount=10000000&slippageBps=50`;
+        console.log("Fetching Jupiter Quote:", url);
+
+        const res = await fetch(url);
+        const data = await res.json();
+
+        if (data && data.routePlan) {
+          const routePlan = data.routePlan;
+          console.log("FULL ROUTE:", routePlan); // Debug detail rute mentah
+
+          const labelsRaw: string[] = routePlan.map((r: any) => r.swapInfo.label || "Unknown");
+          const hops = routePlan.length;
+          const labelText = labelsRaw.join(" → ");
+
+          // Gunakan helper classifyRoute yang sudah kita buat di atas
+          const routeType = classifyRoute(routePlan);
+
+          const result = { routeType, label: labelText, hops };
+          console.log("Route Analysis:", result);
+          setAnalysis(result);
+        } else {
+          setAnalysis({ routeType: "UNKNOWN", label: "No route", hops: 0 });
+        }
+      } catch (err) {
+        setAnalysis({ routeType: "UNKNOWN", label: "Analysis failed", hops: 0 });
+      }
+    };
+
+    void analyzeRoute();
+  }, [outputMint]);
 
   // Init / re-init Jupiter when the active Solana token changes
   useEffect(() => {
@@ -124,6 +210,25 @@ export default function Swap() {
               <span className={styles.dot}>·</span>
               <span className={styles.feeBadge}>FEE 0.50%</span>
             </div>
+
+            {/* Route Analysis Badge */}
+            {analysis && (
+              <div className={styles.routeInfo}>
+                <span className={
+                  analysis.routeType === "FEE_ACTIVE" ? styles.badgeActive :
+                  analysis.routeType === "PARTIAL" ? styles.badgePartial :
+                  analysis.routeType === "NO_FEE" ? styles.badgeNone : styles.badgeUnknown
+                }>
+                  {analysis.routeType === "FEE_ACTIVE" && "🟣 Jupiter Route (Fee Active)"}
+                  {analysis.routeType === "PARTIAL" && "🟡 Aggregator (Partial Fee)"}
+                  {analysis.routeType === "NO_FEE" && "🔴 No Fee Route"}
+                  {analysis.routeType === "UNKNOWN" && "⚪ Unknown Route"}
+                </span>
+                <span className={styles.routeLabel}>
+                  {analysis.hops > 0 && `(${analysis.hops} HOP${analysis.hops > 1 ? 'S' : ''}: ${analysis.label})`}
+                </span>
+              </div>
+            )}
           </div>
         )}
 

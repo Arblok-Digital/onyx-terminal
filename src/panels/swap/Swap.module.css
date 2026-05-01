@@ -106,6 +106,53 @@
   letter-spacing: 0.06em;
 }
 
+/* ── Route Analysis ───────────────────────────────────────────────── */
+
+.routeInfo {
+  margin-top: 2px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 9px;
+  font-weight: 700;
+  font-family: var(--font-mono);
+}
+
+.badgeActive { color: #a855f7; }
+.badgePartial { color: #eab308; }
+.badgeNone { color: #ef4444; }
+.badgeUnknown { color: #9ca3af; }
+
+.routeLabel {
+  color: var(--text-muted);
+  font-weight: 400;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── Migration Status ────────────────────────────────────────────── */
+
+.migrationRow {
+  margin-top: 4px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 9px;
+  font-weight: 800;
+}
+
+.migPre { color: #ef4444; }
+.migTrans { color: #eab308; }
+.migPost { color: #a855f7; }
+
+.migScore {
+  color: var(--text-secondary);
+  opacity: 0.8;
+}
+
 /* ── Jupiter mount target ─────────────────────────────────────────── */
 
 .jupTarget {

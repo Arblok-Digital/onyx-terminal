@@ -23,7 +23,7 @@ const HOST_INTERVALS: Record<string, number> = {
   "api.geckoterminal.com": 2100, // 30 req/min → safe at 2100ms
   "public-api.birdeye.so": 1100,
   "api.helius.xyz": 200,
-  "quote-api.jup.ag": 200,
+  "api.jup.ag": 200,
   "api.solscan.io": 600,
 };
 
