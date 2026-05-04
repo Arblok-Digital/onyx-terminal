@@ -58,7 +58,7 @@ function formatOut(rawStr, decimals) {
 }
 
 // Proxy URL - Bersihkan trailing slash jika ada
-const PROXY_BASE = (import.meta.env.VITE_JUP_PROXY_URL || "http://localhost:3001").replace(/\/$/, "");
+const PROXY_BASE = (import.meta.env.VITE_JUP_PROXY_URL || "").replace(/\/$/, "");
 
 export default function Swap() {
   const open = useUiStore((s) => s.swapOpen);
@@ -79,6 +79,7 @@ export default function Swap() {
   const [quoteLoading, setQuoteLoading] = useState(false);
   const [quoteError, setQuoteError] = useState("");
   const [refreshTick, setRefreshTick] = useState(0);
+  const [allowPump, setAllowPump] = useState(false);
   const [timeLeft, setTimeLeft] = useState(20);
 
   // Swap execution state
@@ -208,6 +209,7 @@ export default function Swap() {
     setPasteCa("");
     if (selected && selected.chainId === "solana" && selected.address) {
       setToMint(selected.address);
+      setAllowPump(!!(selected as any).fromNewListing);
     }
   }, [open, selected]);
 
@@ -232,6 +234,7 @@ export default function Swap() {
       outputMint: toMint,
       amount: String(amountRaw),
       slippageBps: String(slippageBps),
+      allowPump: String(allowPump),
     });
 
     const url = `${PROXY_BASE}/api/jup/quote?${params}`;
@@ -247,7 +250,7 @@ export default function Swap() {
         console.error("Fetch error details:", err);
         if (!cancelled) {
           setQuote(null); // Bersihkan jalur jika quote gagal
-          setQuoteError(err.message === "Failed to fetch" ? "Proxy offline (Check localhost:3001)" : err.message);
+          setQuoteError(err.message === "Failed to fetch" ? "Serverless Proxy tidak merespon. Pastikan Environment Variables sudah di-set di Vercel." : err.message);
         }
       })
       .finally(() => {
@@ -255,7 +258,7 @@ export default function Swap() {
       });
 
     return () => { cancelled = true; };
-  }, [open, fromMint, toMint, amountRaw, slippage, refreshTick]);
+  }, [open, fromMint, toMint, amountRaw, slippage, refreshTick, allowPump]);
 
   // Eksekusi swap
   const executeSwap = async () => {
@@ -324,6 +327,7 @@ export default function Swap() {
     }
     setPasteErr("");
     if (pasteTarget === "from") setFromMint(v); else setToMint(v);
+    setAllowPump(false); // Reset safety
     setPasteCa("");
   };
 
@@ -432,6 +436,15 @@ export default function Swap() {
           </div>
           {pasteErr && <div className={css.error}>{pasteErr}</div>}
           {quoteError && <div className={css.error}>{quoteError}</div>}
+
+          {/* Badge Mode Discovery */}
+          {allowPump && (
+            <div className={css.error} style={{ color: '#fbbf24', borderColor: '#fbbf24', background: 'rgba(251,191,36,0.05)' }}>
+              ⚠️ MODE NEW LISTING: Jalur Pump.fun dibuka. 
+              High risk & terminal tidak mengambil fee transaksi ini.
+            </div>
+          )}
+
           {swapError && <div className={css.error}>{swapError}</div>}
           {swapSuccess && (
             <div className={css.success}>

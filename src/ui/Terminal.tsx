@@ -17,7 +17,7 @@ import StatusBar from "./StatusBar";
 import Watchlist from "@/panels/watchlist/Watchlist";
 import Chart from "@/panels/chart/Chart";
 import Info from "@/panels/info/Info";
-import Swap from "@/panels/swap/Swap";
+import Swap from "@/panels/swap/Swap"; // Pastikan S besar merujuk ke Swap.tsx
 import Discover from "@/panels/discover/Discover";
 import FlowMonitor from "@/panels/flow-monitor/FlowMonitor";
 

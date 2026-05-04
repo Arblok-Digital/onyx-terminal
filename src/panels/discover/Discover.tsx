@@ -135,8 +135,15 @@ export default function Discover() {
 
   function handleSelect(addr: string, ch: string, sym?: string) {
     const chainId = normalizeChain(ch);
-    setActiveToken({ address: addr, chain: chainId, symbol: sym });
-    bus.emit("token:select", { address: addr, chain: chainId, symbol: sym });
+    const isNewListing = tab === "listings";
+    const tokenData = { 
+      address: addr, 
+      chain: chainId, 
+      symbol: sym, 
+      fromNewListing: isNewListing 
+    };
+    setActiveToken(tokenData);
+    bus.emit("token:select", tokenData);
   }
 
   const ago = updatedAt
