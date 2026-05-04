@@ -79,6 +79,7 @@ export default function Swap() {
   const [quoteLoading, setQuoteLoading] = useState(false);
   const [quoteError, setQuoteError] = useState("");
   const [refreshTick, setRefreshTick] = useState(0);
+  const [timeLeft, setTimeLeft] = useState(20);
 
   // Swap execution state
   const [swapping, setSwapping] = useState(false);
@@ -178,15 +179,27 @@ export default function Swap() {
     return Math.floor(amt * Math.pow(10, fromInfo.decimals));
   }, [amount, fromInfo]);
 
-  // Auto-refresh timer: Update quote setiap 20 detik
+  // Auto-refresh timer: Hitung mundur & Update quote setiap 20 detik
   useEffect(() => {
-    if (!open) return;
-    const interval = setInterval(() => {
-      // Hanya refresh jika sedang tidak loading dan tidak sedang proses swap
-      if (!quoteLoading && !swapping) setRefreshTick(t => t + 1);
-    }, 20000); 
-    return () => clearInterval(interval);
-  }, [open, quoteLoading, swapping]);
+    if (!open || swapping) return;
+    
+    const id = setInterval(() => {
+      setTimeLeft((prev) => {
+        if (prev <= 1) {
+          setRefreshTick(t => t + 1);
+          return 20;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(id);
+  }, [open, swapping]);
+
+  // Reset countdown tiap kali user ubah parameter koin/amount
+  useEffect(() => {
+    setTimeLeft(20);
+  }, [fromMint, toMint, amountRaw, slippage]);
 
   // Prefill TO token ketika modal dibuka dan selected token adalah Solana
   useEffect(() => {
@@ -200,14 +213,17 @@ export default function Swap() {
 
   // Fetch quote via proxy
   useEffect(() => {
+    let cancelled = false;
+
     if (!open || !fromMint || !toMint || !amountRaw) {
-      setQuote(null);
+      if (!cancelled) setQuote(null);
       return;
     }
 
-    let cancelled = false;
     setQuoteLoading(true);
     setQuoteError("");
+    // 🔥 Hapus UI jalur rout lama segera jika koin diganti (Real-time reset)
+    setQuote(prev => (prev?.inputMint !== fromMint || prev?.outputMint !== toMint) ? null : prev);
 
     const slippageBps = Math.floor(Number(slippage) * 100) || 50;
 
@@ -229,7 +245,10 @@ export default function Swap() {
       })
       .catch((err) => {
         console.error("Fetch error details:", err);
-        if (!cancelled) setQuoteError(err.message === "Failed to fetch" ? "Proxy offline (Check localhost:3001)" : err.message);
+        if (!cancelled) {
+          setQuote(null); // Bersihkan jalur jika quote gagal
+          setQuoteError(err.message === "Failed to fetch" ? "Proxy offline (Check localhost:3001)" : err.message);
+        }
       })
       .finally(() => {
         if (!cancelled) setQuoteLoading(false);
@@ -340,6 +359,14 @@ export default function Swap() {
             <span className={css.title}>SWAP</span>
             <span className={css.sub}>via Onyx Proxy · Fee to ATA</span>
           </div>
+          {quote && !swapping && (
+            <div className={css.refreshIndicator}>
+              <span className={css.refreshDot} />
+              <span className={css.refreshText}>
+                {quoteLoading ? "UPDATING..." : `REFRESH IN ${timeLeft}S`}
+              </span>
+            </div>
+          )}
           <button className={css.close} onClick={close} title="Close (Esc)">×</button>
         </div>
 

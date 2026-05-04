@@ -299,6 +299,38 @@
   outline: none;
 }
 
+/* ── Refresh Indicator ─────────────────────────────────────────── */
+.refreshIndicator {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  margin-right: 12px;
+  padding: 2px 6px;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 3px;
+  border: 1px solid var(--border);
+}
+.refreshText {
+  font-size: 9px;
+  color: var(--text-muted);
+  font-weight: bold;
+  letter-spacing: 0.5px;
+}
+.refreshDot {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 5px var(--accent);
+  animation: pulse 2s infinite;
+}
+@keyframes pulse {
+  0% { opacity: 0.4; }
+  50% { opacity: 1; }
+  100% { opacity: 0.4; }
+}
+
 /* ── Actions ────────────────────────────────────────────────────── */
 .actions {
   display: flex;
