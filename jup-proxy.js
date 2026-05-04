@@ -39,7 +39,7 @@ app.get('/api/jup/test', (req, res) => {
  */
 app.get('/api/jup/quote', async (req, res) => {
   try {
-    const { inputMint, outputMint, amount, slippageBps, allowPump } = req.query;
+    const { inputMint, outputMint, amount, slippageBps } = req.query;
 
     if (!inputMint || !outputMint || !amount) {
       return res.status(400).json({ error: "Missing required parameters" });
@@ -50,8 +50,7 @@ app.get('/api/jup/quote', async (req, res) => {
     const isOutputTarget = (outputMint === MINTS.WSOL || outputMint === MINTS.USDC);
     const platformFeeBps = (isInputTarget || isOutputTarget) ? 50 : 0;
 
-    const shouldBlockPump = allowPump !== 'true';
-    console.log(`Quote Request: In=${inputMint}, Out=${outputMint}, AllowPump=${!shouldBlockPump}`);
+    console.log(`Quote Request: In=${inputMint}, Out=${outputMint}`);
 
     // 🔥 FIX: Handle Auto Slippage lebih robust (trim & lowercase)
     const isAuto = typeof slippageBps === 'string' && slippageBps.toLowerCase().trim() === 'auto';
@@ -63,6 +62,10 @@ app.get('/api/jup/quote', async (req, res) => {
       if (!isNaN(parsed)) manualSlippageBps = parsed;
     }
 
+    console.log(`[DEBUG] Requesting quote to Jupiter:`, { 
+      inputMint, outputMint, amount, platformFeeBps
+    });
+
     const response = await axios.get(`${JUP_BASE_URL}/quote`, {
       params: {
         inputMint,
@@ -71,8 +74,7 @@ app.get('/api/jup/quote', async (req, res) => {
         ...(isAuto 
           ? { autoSlippage: true, autoSlippageCollisionUsdValue: 1000 } 
           : { slippageBps: manualSlippageBps }),
-        platformFeeBps,
-        excludeDexes: "Pump.fun Amm" // 🚫 Blokir lebih ketat agar fee tetap aman
+        platformFeeBps
       },
       headers: {
         'x-api-key': JUP_API_KEY,
@@ -82,6 +84,9 @@ app.get('/api/jup/quote', async (req, res) => {
 
     const quoteData = response.data;
 
+    console.log(`[DEBUG] Jupiter raw response status: ${response.status}`);
+    console.log(`[DEBUG] Jupiter raw response data:`, JSON.stringify(quoteData).slice(0, 500));
+
     // 1. Pengecekan Error Jupiter (Case Insensitive)
     if (quoteData.error) {
       const errMessage = String(quoteData.error).toLowerCase();
@@ -89,7 +94,7 @@ app.get('/api/jup/quote', async (req, res) => {
 
       if (errMessage.includes("no routes found") || errMessage.includes("not found")) {
         return res.status(400).json({ 
-          error: "Likuiditas belum stabil / Rute belum tersedia. Jika ini token mecin baru, harap tunggu 1-2 menit hingga likuiditas migrasi sepenuhnya ke pool publik yang lebih aman (Raydium/Orca)." 
+          error: "Likuiditas pada DEX terintegrasi belum tersedia. Harap tunggu hingga token bermigrasi ke pool publik yang lebih stabil (Raydium/Orca) untuk memastikan keamanan transaksi." 
         });
       }
       return res.status(400).json({ error: quoteData.error });
@@ -99,16 +104,7 @@ app.get('/api/jup/quote', async (req, res) => {
     // Ini mengindikasikan tidak ada rute yang ditemukan, tapi Jupiter tidak mengembalikan error eksplisit di properti 'error'.
     if (!quoteData.routePlan || quoteData.routePlan.length === 0) {
       console.warn("[QUOTE_EMPTY] Jupiter API returned no routePlan for the given pair.");
-      return res.status(400).json({ error: "Saat ini belum ada rute swap yang tersedia untuk pasangan token ini. Coba cek lagi nanti atau tunggu token masuk ke pool likuiditas yang lebih stabil (misal: Raydium, Orca, atau Meteora V2 setelah migrasi)." });
-    }
-
-    // 3. Double Check untuk Pump.fun (tetap jalankan setelah semua rute ditemukan)
-    const hasPump = quoteData.routePlan.some(step =>
-      step.swapInfo?.label?.toLowerCase().includes("pump")
-    );
-    if (shouldBlockPump && hasPump) {
-      console.warn("[BLOCK] Pump.fun detected in route plan despite exclusion.");
-      return res.status(400).json({ error: "Rute terdeteksi via pool berisiko tinggi (Pump.fun). Ini terlalu beresiko, harap tunggu hingga token masuk ke pool yang aman (Raydium/Orca)." });
+      return res.status(400).json({ error: "Rute aman tidak ditemukan. Sistem menyarankan untuk menunggu hingga token memiliki likuiditas stabil di DEX terintegrasi (Raydium, Orca, atau Meteora)." });
     }
 
     res.json(quoteData);

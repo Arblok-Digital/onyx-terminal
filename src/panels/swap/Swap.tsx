@@ -241,14 +241,15 @@ export default function Swap() {
     fetch(url)
       .then((res) => {
         if (!res.ok) {
-          // Jika bukan OK, cek apakah ini JSON atau HTML (404/500)
           return res.text().then(text => {
+            let msg = `Server Error (${res.status})`;
             try {
               const json = JSON.parse(text);
-              throw new Error(json.error || "Quote failed");
+              if (json.error) msg = json.error;
             } catch {
-              throw new Error(`API Error (${res.status}): Pastikan folder /api sudah ter-deploy di Vercel.`);
+              if (res.status === 404) msg = "Endpoint proxy tidak ditemukan (404).";
             }
+            throw new Error(msg);
           });
         }
         return res.json();
@@ -337,7 +338,8 @@ export default function Swap() {
     }
     setPasteErr("");
     if (pasteTarget === "from") setFromMint(v); else setToMint(v);
-    setAllowPump(false); // Reset safety
+    // Reset Discovery Mode saat paste manual agar tidak "nyangkut" dari koin sebelumnya
+    setAllowPump(false); 
     setPasteCa("");
   };
 
@@ -371,7 +373,7 @@ export default function Swap() {
         <div className={css.header}>
           <div>
             <span className={css.title}>SWAP</span>
-            <span className={css.sub}>via Onyx Proxy · Fee to ATA</span>
+            <span className={css.sub}>via Onyx Proxy · Secure Routing</span>
           </div>
           {quote && !swapping && (
             <div className={css.refreshIndicator}>
@@ -412,7 +414,10 @@ export default function Swap() {
           <div className={css.slot}>
             <span className={css.slotLabel}>From {getTokenLabel(fromInfo)}</span>
             <div className={css.slotRow}>
-              <select className={css.tokenSelect} value={fromMint} onChange={(e) => setFromMint(e.target.value)}>
+              <select className={css.tokenSelect} value={fromMint} onChange={(e) => {
+                setFromMint(e.target.value);
+                setAllowPump(false); // Reset peringatan Discovery saat ganti token manual
+              }}>
                 {renderTokenOptions()}
               </select>
               <input className={css.amountInput} type="number" step="any" min="0" placeholder="0.0"
@@ -426,7 +431,10 @@ export default function Swap() {
           <div className={css.slot}>
             <span className={css.slotLabel}>To {quoteLoading && "(quoting…)"} {getTokenLabel(toInfo)}</span>
             <div className={css.slotRow}>
-              <select className={css.tokenSelect} value={toMint} onChange={(e) => setToMint(e.target.value)}>
+              <select className={css.tokenSelect} value={toMint} onChange={(e) => {
+                setToMint(e.target.value);
+                setAllowPump(false); // Reset peringatan Discovery saat ganti token manual
+              }}>
                 {renderTokenOptions()}
               </select>
               <span className={css.amountReadonly}>{outDisplay}</span>
@@ -446,14 +454,6 @@ export default function Swap() {
           </div>
           {pasteErr && <div className={css.error}>{pasteErr}</div>}
           {quoteError && <div className={css.error}>{quoteError}</div>}
-
-          {/* Badge Mode Discovery */}
-          {allowPump && (
-            <div className={css.error} style={{ color: '#fbbf24', borderColor: '#fbbf24', background: 'rgba(251,191,36,0.05)' }}>
-              ⚠️ MODE NEW LISTING: Jalur Pump.fun dibuka. 
-              High risk & terminal tidak mengambil fee transaksi ini.
-            </div>
-          )}
 
           {swapError && <div className={css.error}>{swapError}</div>}
           {swapSuccess && (
@@ -541,7 +541,7 @@ export default function Swap() {
           </div>
 
           <div className={css.hint}>
-            {wallet ? "Sign & send via Wallet. Fee otomatis masuk ATA Onyx." : "Connect Wallet untuk memulai swap."}
+            {wallet ? "Konfirmasi transaksi di wallet Anda. Rute dioptimalkan otomatis untuk eksekusi terbaik." : "Connect Wallet untuk memulai swap."}
           </div>
         </div>
 

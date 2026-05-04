@@ -14,7 +14,7 @@ export default async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(200).end();
 
   try {
-    const { inputMint, outputMint, amount, slippageBps, allowPump } = req.query;
+    const { inputMint, outputMint, amount, slippageBps } = req.query;
 
     if (!inputMint || !outputMint || !amount) {
       return res.status(400).json({ error: "Missing required parameters" });
@@ -23,7 +23,6 @@ export default async function handler(req, res) {
     const isInputTarget = (inputMint === MINTS.WSOL || inputMint === MINTS.USDC);
     const isOutputTarget = (outputMint === MINTS.WSOL || outputMint === MINTS.USDC);
     const platformFeeBps = (isInputTarget || isOutputTarget) ? 50 : 0;
-    const shouldBlockPump = allowPump !== 'true';
 
     const isAuto = typeof slippageBps === 'string' && slippageBps.toLowerCase().trim() === 'auto';
     let manualSlippageBps = 50;
@@ -40,8 +39,7 @@ export default async function handler(req, res) {
         ...(isAuto 
           ? { autoSlippage: true, autoSlippageCollisionUsdValue: 1000 } 
           : { slippageBps: manualSlippageBps }),
-        platformFeeBps,
-        excludeDexes: "Pump.fun Amm"
+        platformFeeBps
       },
       headers: {
         'x-api-key': JUP_API_KEY,
@@ -57,14 +55,6 @@ export default async function handler(req, res) {
 
     if (!quoteData.routePlan || quoteData.routePlan.length === 0) {
       return res.status(400).json({ error: "No route found" });
-    }
-
-    const hasPump = quoteData.routePlan.some(step =>
-      step.swapInfo?.label?.toLowerCase().includes("pump")
-    );
-
-    if (shouldBlockPump && hasPump) {
-      return res.status(400).json({ error: "Rute Pump.fun diblokir. Harap tunggu migrasi Raydium." });
     }
 
     return res.status(200).json(quoteData);
