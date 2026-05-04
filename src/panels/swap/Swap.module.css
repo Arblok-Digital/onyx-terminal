@@ -247,6 +247,43 @@
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
+
+/* ── Route Visualization ────────────────────────────────────────── */
+.routeContainer {
+  grid-column: 1 / -1;
+  margin-top: 6px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.routeTitle {
+  font-size: 9px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.routeFlow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+}
+.routeStep {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  padding: 1px 5px;
+  border-radius: 2px;
+  color: var(--accent);
+  white-space: nowrap;
+}
+.routeArrow {
+  color: var(--text-muted);
+  font-size: 12px;
+  opacity: 0.5;
+}
 .metaValue.warn { color: #fbbf24; }
 .metaValue.bad { color: var(--red); }
 

@@ -464,6 +464,24 @@ export default function Swap() {
             </div>
           )}
 
+          {/* Visual Route Plan */}
+          {quote && quote.routePlan && (
+            <div className={css.routeContainer}>
+              <span className={css.routeTitle}>Execution Route</span>
+              <div className={css.routeFlow}>
+                <span className={css.routeStep}>{fromInfo?.symbol || "IN"}</span>
+                {quote.routePlan.map((step: any, idx: number) => (
+                  <span key={idx} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <span className={css.routeArrow}>→</span>
+                    <span className={css.routeStep} title={`${step.percent}% volume`}>{step.swapInfo.label}</span>
+                  </span>
+                ))}
+                <span className={css.routeArrow}>→</span>
+                <span className={css.routeStep}>{toInfo?.symbol || "OUT"}</span>
+              </div>
+            </div>
+          )}
+
           {/* Action buttons */}
           <div className={css.actions}>
             <button className={`${css.btn} ${css.ghost}`} onClick={close}>Cancel</button>
