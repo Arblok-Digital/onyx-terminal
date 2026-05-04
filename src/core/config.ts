@@ -6,6 +6,8 @@
 export const CONFIG = {
   // Solana & Trading
   JUPITER_REFERRAL_WALLET: import.meta.env.VITE_JUPITER_REFERRAL_WALLET || "5wYwgdRCUDPPtXTrAhPWr7GiqaXHzKWaLPDDj7REtV43",
+  JUPITER_FEE_ACCOUNT_USDC: import.meta.env.VITE_JUPITER_FEE_ACCOUNT_USDC || "EHJqU8SEg12muMp1pb6KH4ghn4UB6rA51KYARetKdAgr",
+  JUPITER_FEE_ACCOUNT_WSOL: import.meta.env.VITE_JUPITER_FEE_ACCOUNT_WSOL || "7S7KfighhMhasJrVbkk8R3hKjtM73JuVLe92oXGCyNnT",
   
   // API Keys (Helius & Birdeye)
   HELIUS_API_KEY: import.meta.env.VITE_HELIUS_API_KEY || "6aa38557-de0e-43c2-a65c-c7cc113d0e33",
@@ -26,3 +28,4 @@ export const CONFIG = {
 
 // Log warning jika API key penting belum diisi di .env
 if (!CONFIG.HELIUS_API_KEY) console.warn("Onyx: VITE_HELIUS_API_KEY is missing. Using public/fallback RPC.");
+if (!CONFIG.SUPABASE_ANON_KEY) console.info("Onyx Analytics: Supabase keys missing. Event logging disabled (401 expected).");

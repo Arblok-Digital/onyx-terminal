@@ -1,15 +1,22 @@
 /**
  * @file swap.config.ts
  * @layer panel
- * @desc Constants for the Jupiter Swap panel: referral account, fee bps,
+ * @desc Constants for the Jupiter Swap panel: fee accounts, fee bps,
  *       SOL mint, and the DOM id where the Jupiter Plugin renders.
- * @exposes REFERRAL_ACCOUNT, REFERRAL_FEE_BPS, SOL_MINT, JUP_TARGET_ID,
+ * @exposes FEE_ACCOUNTS, REFERRAL_FEE_BPS, SOL_MINT, JUP_TARGET_ID,
  *          JUP_SCRIPT_URL
- * @deps -
+ * @deps config.ts (CONFIG)
  */
+import { CONFIG } from "../core/config"; // pastikan path ini benar ya
 
-/** Referral account that collects the platform fee on every swap. */
-export const REFERRAL_ACCOUNT = "5wYwgdRCUDPPtXTrAhPWr7GiqaXHzKWaLPDDj7REtV43";
+/** Main Referral Wallet (Base58) needed by Jupiter Terminal */
+export const REFERRAL_ACCOUNT = CONFIG.JUPITER_REFERRAL_WALLET;
+
+/** Fee accounts that collect the platform fee on every swap (ATA addresses). */
+export const FEE_ACCOUNTS = {
+  USDC: CONFIG.JUPITER_FEE_ACCOUNT_USDC,
+  WSOL: CONFIG.JUPITER_FEE_ACCOUNT_WSOL,
+};
 
 /** Platform fee in basis points (50 bps = 0.50%). */
 export const REFERRAL_FEE_BPS = 50;

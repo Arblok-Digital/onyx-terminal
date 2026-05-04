@@ -9,4 +9,4 @@ export { usePriceStore } from "./price.store";
 export type { TokenSnapshot, ChainId } from "./price.store";
 export { useLayoutStore } from "./layout.store";
 export type { PanelLayout } from "./layout.store";
-export { useUIStore } from "./ui.store";
+export { useUiStore, useUIStore } from "./ui.store";
