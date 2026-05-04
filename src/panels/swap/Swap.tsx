@@ -240,7 +240,17 @@ export default function Swap() {
     const url = `${PROXY_BASE}/api/jup/quote?${params}`;
     fetch(url)
       .then((res) => {
-        if (!res.ok) return res.json().then((err) => { throw new Error(err.error || "Quote failed"); });
+        if (!res.ok) {
+          // Jika bukan OK, cek apakah ini JSON atau HTML (404/500)
+          return res.text().then(text => {
+            try {
+              const json = JSON.parse(text);
+              throw new Error(json.error || "Quote failed");
+            } catch {
+              throw new Error(`API Error (${res.status}): Pastikan folder /api sudah ter-deploy di Vercel.`);
+            }
+          });
+        }
         return res.json();
       })
       .then((data) => {
