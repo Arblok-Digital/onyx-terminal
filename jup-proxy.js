@@ -39,26 +39,40 @@ app.get('/api/jup/test', (req, res) => {
  */
 app.get('/api/jup/quote', async (req, res) => {
   try {
-    const { inputMint, outputMint, amount, slippageBps } = req.query;
+    const { inputMint, outputMint, amount, slippageBps, allowPump } = req.query;
 
     if (!inputMint || !outputMint || !amount) {
       return res.status(400).json({ error: "Missing required parameters" });
     }
 
-    // 🔥 FIX: Fee 50bps jika input ATAU output adalah wSOL/USDC
-    const isInputTarget = (req.query.inputMint === MINTS.WSOL || req.query.inputMint === MINTS.USDC);
+    // Fee 50bps jika input ATAU output adalah wSOL/USDC (Logika 2 arah)
+    const isInputTarget = (inputMint === MINTS.WSOL || inputMint === MINTS.USDC);
     const isOutputTarget = (outputMint === MINTS.WSOL || outputMint === MINTS.USDC);
     const platformFeeBps = (isInputTarget || isOutputTarget) ? 50 : 0;
 
-    console.log(`Quote Request: In=${req.query.inputMint}, Out=${outputMint}, Fee=${platformFeeBps}bps`);
+    const shouldBlockPump = allowPump !== 'true';
+    console.log(`Quote Request: In=${inputMint}, Out=${outputMint}, AllowPump=${!shouldBlockPump}`);
+
+    // 🔥 FIX: Handle Auto Slippage lebih robust (trim & lowercase)
+    const isAuto = typeof slippageBps === 'string' && slippageBps.toLowerCase().trim() === 'auto';
+    
+    // 🔥 FIX: Pastikan slippageBps selalu integer jika manual
+    let manualSlippageBps = 50; // fallback default
+    if (!isAuto && slippageBps) {
+      const parsed = parseInt(String(slippageBps), 10);
+      if (!isNaN(parsed)) manualSlippageBps = parsed;
+    }
 
     const response = await axios.get(`${JUP_BASE_URL}/quote`, {
       params: {
         inputMint,
         outputMint,
         amount,
-        slippageBps: slippageBps || 50,
-        platformFeeBps
+        ...(isAuto 
+          ? { autoSlippage: true, autoSlippageCollisionUsdValue: 1000 } 
+          : { slippageBps: manualSlippageBps }),
+        platformFeeBps,
+        excludeDexes: "Pump.fun Amm" // 🚫 Blokir lebih ketat agar fee tetap aman
       },
       headers: {
         'x-api-key': JUP_API_KEY,
@@ -66,7 +80,38 @@ app.get('/api/jup/quote', async (req, res) => {
       }
     });
 
-    res.json(response.data);
+    const quoteData = response.data;
+
+    // 1. Pengecekan Error Jupiter (Case Insensitive)
+    if (quoteData.error) {
+      const errMessage = String(quoteData.error).toLowerCase();
+      console.warn("[QUOTE_ERROR] Jupiter API:", quoteData.error);
+
+      if (errMessage.includes("no routes found") || errMessage.includes("not found")) {
+        return res.status(400).json({ 
+          error: "Likuiditas belum stabil / Rute belum tersedia. Jika ini token mecin baru, harap tunggu 1-2 menit hingga likuiditas migrasi sepenuhnya ke pool publik yang lebih aman (Raydium/Orca)." 
+        });
+      }
+      return res.status(400).json({ error: quoteData.error });
+    }
+
+    // 2. Periksa jika quoteData tidak memiliki routePlan atau routePlan-nya kosong
+    // Ini mengindikasikan tidak ada rute yang ditemukan, tapi Jupiter tidak mengembalikan error eksplisit di properti 'error'.
+    if (!quoteData.routePlan || quoteData.routePlan.length === 0) {
+      console.warn("[QUOTE_EMPTY] Jupiter API returned no routePlan for the given pair.");
+      return res.status(400).json({ error: "Saat ini belum ada rute swap yang tersedia untuk pasangan token ini. Coba cek lagi nanti atau tunggu token masuk ke pool likuiditas yang lebih stabil (misal: Raydium, Orca, atau Meteora V2 setelah migrasi)." });
+    }
+
+    // 3. Double Check untuk Pump.fun (tetap jalankan setelah semua rute ditemukan)
+    const hasPump = quoteData.routePlan.some(step =>
+      step.swapInfo?.label?.toLowerCase().includes("pump")
+    );
+    if (shouldBlockPump && hasPump) {
+      console.warn("[BLOCK] Pump.fun detected in route plan despite exclusion.");
+      return res.status(400).json({ error: "Rute terdeteksi via pool berisiko tinggi (Pump.fun). Ini terlalu beresiko, harap tunggu hingga token masuk ke pool yang aman (Raydium/Orca)." });
+    }
+
+    res.json(quoteData);
   } catch (error) {
     const status = error.response?.status || 500;
     console.error(`Quote Proxy Error [${status}]:`, error.response?.data || error.message);
@@ -85,9 +130,7 @@ app.post('/api/jup/swap', async (req, res) => {
       return res.status(400).json({ error: "Missing swap parameters" });
     }
 
-    const outputMint = quoteResponse.outputMint;
-    const inputMint = quoteResponse.inputMint; // 🔥 Ambil inputMint untuk logic tambahan
-
+    const { inputMint, outputMint } = quoteResponse;
     const swapParams = {
       quoteResponse,
       userPublicKey,
