@@ -11,7 +11,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Buffer } from "buffer";
-import { VersionedTransaction } from "@solana/web3.js";
+import { VersionedTransaction, Connection } from "@solana/web3.js";
 import {
   useJupiterTokenInfo,
   KNOWN_TOKENS,
@@ -19,18 +19,19 @@ import {
 } from "../../hooks/useJupiterQuote";
 import { useUiStore } from "../../core/store/ui.store";
 import css from "./Swap.module.css";
+import { CONFIG } from "../../core/config";
 
 const KNOWN_LIST = Object.values(KNOWN_TOKENS);
 
 // Helper: Format label token agar tidak double address
-function getTokenLabel(info) {
+function getTokenLabel(info: any) {
   if (!info) return "";
   if (info.symbol === "UNKN" || !info.symbol) return `· ${shortMint(info.mint)}`;
   return `· ${info.symbol} · ${shortMint(info.mint)}`;
 }
 
 // Helper: short mint address
-function shortMint(m) {
+function shortMint(m: string | null | undefined) {
   if (!m) return "";
   return m.length <= 10 ? m : `${m.slice(0, 4)}…${m.slice(-4)}`;
 }
@@ -56,8 +57,8 @@ function formatOut(rawStr, decimals) {
   }
 }
 
-// Proxy URL (bisa disesuaikan via .env)
-const PROXY_BASE = import.meta.env.VITE_JUP_PROXY_URL || "http://localhost:3001";
+// Proxy URL - Bersihkan trailing slash jika ada
+const PROXY_BASE = (import.meta.env.VITE_JUP_PROXY_URL || "http://localhost:3001").replace(/\/$/, "");
 
 export default function Swap() {
   const open = useUiStore((s) => s.swapOpen);
@@ -84,9 +85,76 @@ export default function Swap() {
   const [swapError, setSwapError] = useState("");
   const [swapSuccess, setSwapSuccess] = useState("");
 
-  // Wallet
-  const [wallet, setWallet] = useState(null);
-  const [walletReady, setWalletReady] = useState(false);
+  // Manual Wallet State
+  const [wallet, setWallet] = useState<string | null>(null);
+  const [activeProvider, setActiveProvider] = useState<any>(null);
+  const [activeWalletName, setActiveWalletName] = useState("");
+  const [detectedWallets, setDetectedWallets] = useState<any[]>([]);
+  const [showMenu, setShowMenu] = useState(false);
+
+  // Detect available wallets on mount
+  useEffect(() => {
+    if (!open) return;
+    const win = window as any;
+    const found: any[] = [];
+    
+    // 1. Cek Solflare
+    if (win.solflare) found.push({ id: 'solflare', name: 'Solflare', p: win.solflare });
+    
+    // 2. Cek Backpack (Sering disebut Jup Wallet)
+    if (win.backpack) found.push({ id: 'backpack', name: 'Backpack', p: win.backpack });
+    
+    // 3. Cek window.solana (Phantom atau wallet standar lainnya)
+    if (win.solana && !found.some(w => w.p === win.solana)) {
+      const name = win.solana.isPhantom ? 'Phantom' : 'Solana Wallet';
+      found.push({ id: 'solana', name, p: win.solana });
+    }
+
+    setDetectedWallets(found);
+
+    // Auto-connect attempt for trusted wallets
+    found.forEach(item => {
+      item.p.connect({ onlyIfTrusted: true })
+        .then((res: any) => {
+          if (res?.publicKey && !wallet) {
+            setWallet(res.publicKey.toString());
+            setActiveProvider(item.p);
+            setActiveWalletName(item.name);
+          }
+        })
+        .catch(() => {});
+    });
+  }, [open, wallet]);
+
+  const connectTo = async (item: any) => {
+    try {
+      const resp = await item.p.connect();
+      setWallet(resp.publicKey.toString());
+      setActiveProvider(item.p);
+      setActiveWalletName(item.name);
+      setShowMenu(false);
+    } catch (e) {
+      console.error("Connection error", e);
+    }
+  };
+
+  const disconnectWallet = () => {
+    setWallet(null);
+    setActiveProvider(null);
+    setActiveWalletName("");
+  };
+
+  const handleConnectClick = () => {
+    if (detectedWallets.length === 0) {
+      alert("No Solana wallet found! Please install Phantom, Solflare or Backpack.");
+      return;
+    }
+    if (detectedWallets.length === 1) {
+      connectTo(detectedWallets[0]);
+    } else {
+      setShowMenu(!showMenu);
+    }
+  };
 
   // Resolve token info
   const toResolved = useJupiterTokenInfo(toMint);
@@ -150,7 +218,8 @@ export default function Swap() {
       slippageBps: String(slippageBps),
     });
 
-    fetch(`${PROXY_BASE}/api/jup/quote?${params}`)
+    const url = `${PROXY_BASE}/api/jup/quote?${params}`;
+    fetch(url)
       .then((res) => {
         if (!res.ok) return res.json().then((err) => { throw new Error(err.error || "Quote failed"); });
         return res.json();
@@ -159,7 +228,8 @@ export default function Swap() {
         if (!cancelled) setQuote(data);
       })
       .catch((err) => {
-        if (!cancelled) setQuoteError(err.message);
+        console.error("Fetch error details:", err);
+        if (!cancelled) setQuoteError(err.message === "Failed to fetch" ? "Proxy offline (Check localhost:3001)" : err.message);
       })
       .finally(() => {
         if (!cancelled) setQuoteLoading(false);
@@ -168,54 +238,11 @@ export default function Swap() {
     return () => { cancelled = true; };
   }, [open, fromMint, toMint, amountRaw, slippage, refreshTick]);
 
-  // Global Wallet Detection (Phantom, Solflare, Backpack, etc.)
-  useEffect(() => {
-    const checkWallet = async () => {
-      const provider = window?.solana || window?.solflare || window?.backpack;
-      if (provider) {
-        try {
-          const resp = await provider.connect({ onlyIfTrusted: true });
-          setWallet(resp.publicKey.toString());
-          setWalletReady(true);
-        } catch {
-          setWalletReady(true);
-        }
-      } else {
-        setWalletReady(false);
-      }
-    };
-    if (open) checkWallet();
-  }, [open]);
-
-  const connectWallet = async () => {
-    const provider = window?.solana || window?.solflare || window?.backpack;
-    if (!provider) {
-      alert("No Solana wallet found. Please install Phantom, Solflare or Backpack.");
-      return;
-    }
-    try {
-      const resp = await provider.connect();
-      setWallet(resp.publicKey.toString());
-    } catch (e) {
-      console.error("Connect failed:", e);
-    }
-  };
-
-  const disconnectWallet = async () => {
-    const provider = window?.solana || window?.solflare || window?.backpack;
-    if (provider) {
-      try {
-        await provider.disconnect();
-        setWallet(null);
-      } catch (e) {
-        console.error("Disconnect failed:", e);
-      }
-    }
-  };
-
   // Eksekusi swap
   const executeSwap = async () => {
-    if (!quote || !wallet) return;
+    const provider = activeProvider;
+    if (!quote || !wallet || !provider) return;
+    
     setSwapping(true);
     setSwapError("");
     setSwapSuccess("");
@@ -238,17 +265,16 @@ export default function Swap() {
 
       const { swapTransaction } = await swapRes.json();
 
-      const provider = window?.solana || window?.solflare || window?.backpack;
       // Deserialize base64 ke VersionedTransaction agar wallet bisa mengenali datanya
       const transaction = VersionedTransaction.deserialize(Buffer.from(swapTransaction, "base64"));
+      
+      // Sign transaksi
       const signed = await provider.signTransaction(transaction);
-
-      const signature = await provider.request({
-        method: "sendTransaction",
-        params: {
-          transaction: Buffer.from(signed.serialize()).toString("base64"),
-          options: { skipPreflight: false },
-        },
+      
+      // Kirim via RPC (Gunakan Helius dari config)
+      const connection = new Connection(CONFIG.HELIUS_RPC(CONFIG.HELIUS_API_KEY));
+      const signature = await connection.sendRawTransaction(signed.serialize(), {
+        skipPreflight: false,
       });
 
       setSwapSuccess(signature);
@@ -320,15 +346,24 @@ export default function Swap() {
         <div className={css.body}>
           {/* Wallet status */}
           <div className={css.walletStatus}>
-            {wallet ? (
+            {wallet && activeProvider ? (
               <div className={css.walletInfo}>
-                <span className={css.walletOk}>🟢 {shortMint(wallet)}</span>
+                <span className={css.walletOk}>🟢 {shortMint(wallet)} ({activeWalletName})</span>
                 <button onClick={disconnectWallet} className={css.disconnectBtn}>Disconnect</button>
               </div>
-            ) : walletReady ? (
-              <button onClick={connectWallet} className={`${css.btn} ${css.ghost}`}>Connect Wallet</button>
+            ) : showMenu ? (
+              <div className={css.walletInfo} style={{ gap: '4px' }}>
+                {detectedWallets.map(w => (
+                  <button key={w.id} onClick={() => connectTo(w)} className={css.disconnectBtn} style={{ borderColor: 'var(--accent)', color: 'var(--accent)' }}>
+                    {w.name}
+                  </button>
+                ))}
+                <button onClick={() => setShowMenu(false)} className={css.disconnectBtn}>×</button>
+              </div>
             ) : (
-              <span className={css.walletErr}>No wallet detected</span>
+              <button onClick={handleConnectClick} className={`${css.btn} ${css.ghost}`}>
+                {detectedWallets.length > 0 ? 'Connect Wallet' : 'No Wallet Detected'}
+              </button>
             )}
           </div>
 
@@ -391,18 +426,18 @@ export default function Swap() {
               <span className={css.metaLabel}>Rate</span>
               <span className={css.metaValue}>
                 {quote && toInfo && fromInfo
-                  ? `1 ${fromInfo.symbol === "???" ? shortMint(fromInfo.mint) : fromInfo.symbol} ≈ ${formatOut(
+                  ? `1 ${fromInfo.symbol === "UNKN" ? shortMint(fromInfo.mint) : fromInfo.symbol} ≈ ${formatOut(
                       String(Math.round((Number(quote.outAmount) / Math.max(1, Number(quote.inAmount))) * Math.pow(10, fromInfo.decimals))),
                       toInfo.decimals,
-                    )} ${toInfo.symbol === "???" ? shortMint(toInfo.mint) : toInfo.symbol}`
+                    )} ${toInfo.symbol === "UNKN" ? shortMint(toInfo.mint) : toInfo.symbol}`
                   : "—"}
               </span>
 
-              {/* Info Keterangan Unknown Token di bawah */}
-              {(fromInfo?.symbol === "???" || toInfo?.symbol === "???") && (
+              {/* Info Status untuk Token Baru/Unlisted */}
+              {(fromInfo?.symbol === "UNKN" || toInfo?.symbol === "UNKN") && (
                 <>
                   <span className={css.metaLabel}>Token Status</span>
-                  <span className={`${css.metaValue} ${css.warn}`}>Unknown Token (???)</span>
+                  <span className={`${css.metaValue} ${css.warn}`}>UNLISTED DISCOVERY</span>
                 </>
               )}
 
@@ -438,7 +473,7 @@ export default function Swap() {
           </div>
 
           <div className={css.hint}>
-            {wallet ? "Sign & send via Phantom. Fee otomatis masuk ATA Onyx." : "Connect Phantom untuk swap."}
+            {wallet ? "Sign & send via Wallet. Fee otomatis masuk ATA Onyx." : "Connect Wallet untuk memulai swap."}
           </div>
         </div>
 
