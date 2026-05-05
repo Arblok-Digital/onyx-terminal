@@ -69,58 +69,42 @@ export default function Discover() {
 
     async function tick() {
       try {
-        let currentGeckoAddrs: string[] = [];
-        
-        // Aktifkan fetching Gecko untuk Signals DAN Trending
-        if (tab === 'signals' || tab === 'trending') {
-          const geckoData = await fetchGeckoTerminalPools();
-          if (!stopped) {
-            setGeckoProfiles(geckoData);
-            // Bersihkan prefix 'solana_' dari base_token_id agar DexScreener kenal
-            currentGeckoAddrs = geckoData.map((p: any) => {
-              // Cek relationships.base_token.data.id (standar Gecko V2)
-              const id = p.relationships?.base_token?.data?.id || p.attributes?.base_token_id || "";
-              return id.includes('_') ? id.split('_')[1] : id;
-            }).filter(Boolean);
-            console.log("[Discover] Signals Enrichment List:", currentGeckoAddrs.length, "mints");
-          }
-        }
-
-        const [list, trending] = await Promise.all([
+        // 1. Fetch semua sumber secara PARALEL
+        const [list, trending, geckoData] = await Promise.all([
           getLatestProfiles().catch(() => []),
-          fetch("https://api.dexscreener.com/token-boosts/top/v1").then(res => res.json()).catch(() => [])
+          fetch("https://api.dexscreener.com/token-boosts/top/v1").then(res => res.json()).catch(() => []),
+          (tab === 'signals' || tab === 'trending') ? fetchGeckoTerminalPools() : Promise.resolve([])
         ]);
 
         if (stopped) return;
 
         const trendingArr = Array.isArray(trending) ? trending : (trending?.boosts || []);
-        const trimmedList = Array.isArray(list) ? list.slice(0, MAX_ROWS) : [];
-        const trimmedTrending = trendingArr.slice(0, MAX_ROWS);
+        setProfiles(Array.isArray(list) ? list.slice(0, MAX_ROWS) : []);
+        setTrendingProfiles(trendingArr.slice(0, MAX_ROWS));
+        setGeckoProfiles(geckoData);
 
-        setProfiles(trimmedList);
-        setTrendingProfiles(trimmedTrending);
+        // 2. Kumpulkan alamat dari Gecko untuk enrichment
+        const geckoAddrs = geckoData.map((p: any) => {
+          const id = p.relationships?.base_token?.data?.id || p.attributes?.base_token_id || "";
+          return id.includes('_') ? id.split('_')[1] : id;
+        }).filter(Boolean);
 
-        // Gunakan currentGeckoAddrs yang baru di-fetch agar enrichment langsung jalan tanpa nunggu render cycle berikutnya
         const allProfiles = [
-          ...trimmedList, 
-          ...trimmedTrending, 
-          ...currentGeckoAddrs.map(a => ({ tokenAddress: a }))
+          ...(Array.isArray(list) ? list : []), 
+          ...trendingArr, 
+          ...geckoAddrs.map(a => ({ tokenAddress: a }))
         ];
         
         const addrs = Array.from(new Set(
           allProfiles.map(p => (typeof p === 'string' ? p : p?.tokenAddress)).filter(Boolean)
-        )).slice(0, 60); 
+        )).slice(0, 100); // Naikkan limit ke 100 koin agar tab Signals penuh
 
         if (addrs.length > 0) {
           try {
-            const snaps = await getTokensBatch(addrs.slice(0, 30));
-            const snaps2 = addrs.length > 30 ? await getTokensBatch(addrs.slice(30, 60)) : [];
-            
-            const combinedSnaps = [...snaps, ...snaps2];
-            console.log("[Discover] Enrichment success:", combinedSnaps.length, "snapshots returned");
-            
-            if (!stopped && combinedSnaps.length > 0) {
-              usePriceStore.getState().upsertMany(combinedSnaps);
+            // getTokensBatch sekarang sudah handle chunking internal secara paralel
+            const snaps = await getTokensBatch(addrs);
+            if (!stopped && snaps.length > 0) {
+              usePriceStore.getState().upsertMany(snaps);
             }
           } catch (e) {
             console.error("Batch fetch error:", e);

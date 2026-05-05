@@ -134,26 +134,43 @@ async function fetchJson<T>(url: string): Promise<T> {
 
 /* --------------------------- public API --------------------------- */
 
-/**
- * Batch fetch up to 30 token addresses. Returns one TokenSnapshot per address
- * that has at least one pair on a supported chain.
+/** 
+ * Batch fetch token addresses dengan Parallel Chunking.
+ * DexScreener punya limit 30 PAIRS total per request. 
+ * Kita bagi per 10 koin agar koin mecin tidak tertutup koin besar (SOL/BONK).
  */
-export async function getTokensBatch(
-  addresses: string[],
-): Promise<TokenSnapshot[]> {
-  const batch = addresses.slice(0, 30);
-  if (batch.length === 0) return [];
-  const url = `${BASE}/tokens/${batch.join(",")}`;
-  const data = await scheduleRequest(HOST, () =>
-    fetchJson<TokensResponse>(url),
-  );
-  const pairs = data.pairs ?? [];
-  const snaps: TokenSnapshot[] = [];
-  for (const addr of batch) {
-    const best = pickBestPair(pairs, addr);
-    if (best) snaps.push(pairToSnapshot(best));
+export async function getTokensBatch(addresses: string[]): Promise<TokenSnapshot[]> {
+  const CHUNK_SIZE = 10;
+  const uniqueAddrs = Array.from(new Set(addresses.filter(Boolean)));
+  if (uniqueAddrs.length === 0) return [];
+
+  const chunks: string[][] = [];
+  for (let i = 0; i < uniqueAddrs.length; i += CHUNK_SIZE) {
+    chunks.push(uniqueAddrs.slice(i, i + CHUNK_SIZE));
   }
-  return snaps;
+
+  // Jalankan semua chunk secara PARALEL untuk menghindari bottleneck
+  const results = await Promise.all(
+    chunks.map(async (chunk) => {
+      const url = `${BASE}/tokens/${chunk.join(",")}`;
+      try {
+        const data = await scheduleRequest(HOST, () => fetchJson<TokensResponse>(url));
+        const pairs = data.pairs ?? [];
+        
+        const chunkSnaps: TokenSnapshot[] = [];
+        for (const addr of chunk) {
+          const best = pickBestPair(pairs, addr);
+          if (best) chunkSnaps.push(pairToSnapshot(best));
+        }
+        return chunkSnaps;
+      } catch (e) {
+        console.warn(`[dexscreener] Chunk fetch failed for: ${chunk[0]}...`, e);
+        return [];
+      }
+    })
+  );
+
+  return results.flat();
 }
 
 /* --------------------------- token profiles (new listings) --------------------------- */
