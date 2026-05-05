@@ -39,7 +39,7 @@ app.get('/api/jup/test', (req, res) => {
  */
 app.get('/api/jup/quote', async (req, res) => {
   try {
-    const { inputMint, outputMint, amount, slippageBps } = req.query;
+    const { inputMint, outputMint, amount, slippageBps, allowPump } = req.query;
 
     if (!inputMint || !outputMint || !amount) {
       return res.status(400).json({ error: "Missing required parameters" });
@@ -50,7 +50,8 @@ app.get('/api/jup/quote', async (req, res) => {
     const isOutputTarget = (outputMint === MINTS.WSOL || outputMint === MINTS.USDC);
     const platformFeeBps = (isInputTarget || isOutputTarget) ? 50 : 0;
 
-    console.log(`Quote Request: In=${inputMint}, Out=${outputMint}`);
+    const shouldBlockPump = allowPump !== 'true';
+    console.log(`Quote Request: In=${inputMint}, Out=${outputMint}, AllowPump=${!shouldBlockPump}`);
 
     // 🔥 FIX: Handle Auto Slippage lebih robust (trim & lowercase)
     const isAuto = typeof slippageBps === 'string' && slippageBps.toLowerCase().trim() === 'auto';
@@ -62,9 +63,7 @@ app.get('/api/jup/quote', async (req, res) => {
       if (!isNaN(parsed)) manualSlippageBps = parsed;
     }
 
-    console.log(`[DEBUG] Requesting quote to Jupiter:`, { 
-      inputMint, outputMint, amount, platformFeeBps
-    });
+    console.log(`[QUOTE] In: ${inputMint.slice(0,4)}... Out: ${outputMint.slice(0,4)}... Amt: ${amount}`);
 
     const response = await axios.get(`${JUP_BASE_URL}/quote`, {
       params: {
@@ -74,7 +73,7 @@ app.get('/api/jup/quote', async (req, res) => {
         ...(isAuto 
           ? { autoSlippage: true, autoSlippageCollisionUsdValue: 1000 } 
           : { slippageBps: manualSlippageBps }),
-        platformFeeBps
+        platformFeeBps // Tidak ada excludeDexes di sini
       },
       headers: {
         'x-api-key': JUP_API_KEY,
@@ -84,27 +83,14 @@ app.get('/api/jup/quote', async (req, res) => {
 
     const quoteData = response.data;
 
-    console.log(`[DEBUG] Jupiter raw response status: ${response.status}`);
-    console.log(`[DEBUG] Jupiter raw response data:`, JSON.stringify(quoteData).slice(0, 500));
-
     // 1. Pengecekan Error Jupiter (Case Insensitive)
     if (quoteData.error) {
-      const errMessage = String(quoteData.error).toLowerCase();
-      console.warn("[QUOTE_ERROR] Jupiter API:", quoteData.error);
-
-      if (errMessage.includes("no routes found") || errMessage.includes("not found")) {
-        return res.status(400).json({ 
-          error: "Likuiditas pada DEX terintegrasi belum tersedia. Harap tunggu hingga token bermigrasi ke pool publik yang lebih stabil (Raydium/Orca) untuk memastikan keamanan transaksi." 
-        });
-      }
+      console.error("[JUP_ERR]", quoteData.error);
       return res.status(400).json({ error: quoteData.error });
     }
 
-    // 2. Periksa jika quoteData tidak memiliki routePlan atau routePlan-nya kosong
-    // Ini mengindikasikan tidak ada rute yang ditemukan, tapi Jupiter tidak mengembalikan error eksplisit di properti 'error'.
     if (!quoteData.routePlan || quoteData.routePlan.length === 0) {
-      console.warn("[QUOTE_EMPTY] Jupiter API returned no routePlan for the given pair.");
-      return res.status(400).json({ error: "Rute aman tidak ditemukan. Sistem menyarankan untuk menunggu hingga token memiliki likuiditas stabil di DEX terintegrasi (Raydium, Orca, atau Meteora)." });
+      return res.status(400).json({ error: "Rute tidak ditemukan. Coba naikkan slippage atau tunggu likuiditas." });
     }
 
     res.json(quoteData);

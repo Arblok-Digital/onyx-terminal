@@ -8,7 +8,7 @@ const MINTS = {
 };
 
 export default async function handler(req, res) {
-  // Enable CORS
+  // CORS Headers
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS');
   if (req.method === 'OPTIONS') return res.status(200).end();
@@ -20,6 +20,7 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: "Missing required parameters" });
     }
 
+    // Fee 50bps jika melibatkan SOL/USDC
     const isInputTarget = (inputMint === MINTS.WSOL || inputMint === MINTS.USDC);
     const isOutputTarget = (outputMint === MINTS.WSOL || outputMint === MINTS.USDC);
     const platformFeeBps = (isInputTarget || isOutputTarget) ? 50 : 0;
@@ -54,7 +55,7 @@ export default async function handler(req, res) {
     }
 
     if (!quoteData.routePlan || quoteData.routePlan.length === 0) {
-      return res.status(400).json({ error: "No route found" });
+      return res.status(400).json({ error: "Rute tidak ditemukan. Coba naikkan slippage atau tunggu likuiditas muncul." });
     }
 
     return res.status(200).json(quoteData);

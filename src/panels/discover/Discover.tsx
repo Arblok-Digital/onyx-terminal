@@ -77,8 +77,7 @@ export default function Discover() {
         )).slice(0, 60); 
 
         if (addrs.length > 0) {
-          try {
-            // Pecah batch jika terlalu besar (opsional, tapi 60 biasanya aman)
+          try { // Start of inner try block for getTokensBatch
             const snaps = await getTokensBatch(addrs.slice(0, 30));
             const snaps2 = addrs.length > 30 ? await getTokensBatch(addrs.slice(30, 60)) : [];
             
@@ -87,15 +86,15 @@ export default function Discover() {
             if (!stopped && combinedSnaps.length > 0) {
               usePriceStore.getState().upsertMany(combinedSnaps);
             }
-          } catch {
+          } catch (e) { // Catch for getTokensBatch
+            console.error("Enrichment failure during batch fetch:", e);
             /* enrichment failure ok — list still renders with partial data */
           }
         }
-        if (!stopped) {
-          setUpdatedAt(Date.now());
-          setLoading(false);
-        }
-      } catch {
+        setUpdatedAt(Date.now());
+        setLoading(false);
+      } catch (e) { // Main tick() catch
+        console.error("Main tick function failed:", e);
         if (!stopped) setLoading(false);
       }
     }
@@ -118,7 +117,21 @@ export default function Discover() {
       .filter((p) => {
         if (!p || !p.tokenAddress) return false;
         const ch = normalizeChain(p.chainId);
-        return chain === "all" || ch === chain;
+        const isMatch = chain === "all" || ch === chain;
+
+        // Tab Listings: Bebas hambatan (Kebebasan Degen)
+        if (tab === "listings") return isMatch;
+
+        // Tab Trending & Signals: Gunakan data DexScreener untuk filter "Safe Pool"
+        const snap = tokens[p.tokenAddress.toLowerCase()];
+        if (!snap) return isMatch; // Tampilkan aja kalau data market belum load lengkap
+
+        // List DEX yang kita anggap "Stabil/Terintegrasi"
+        // Tambahin dexId Pump.fun juga kalau mau ditampilkan di trending/signals
+        const safeDexes = ['raydium', 'orca', 'meteora', 'lifinity', 'phoenix', 'pump.fun amm']; // 'pump.fun amm' ditambahkan
+        const isSafePool = safeDexes.includes(snap.dexId?.toLowerCase() || "");
+
+        return isMatch && isSafePool;
       })
       .map((p) => ({
         profile: p,
@@ -135,12 +148,11 @@ export default function Discover() {
 
   function handleSelect(addr: string, ch: string, sym?: string) {
     const chainId = normalizeChain(ch);
-    const isNewListing = tab === "listings";
     const tokenData = { 
       address: addr, 
       chain: chainId, 
-      symbol: sym, 
-      fromNewListing: isNewListing 
+      symbol: sym
+      // fromNewListing tidak lagi relevan
     };
     setActiveToken(tokenData);
     bus.emit("token:select", tokenData);

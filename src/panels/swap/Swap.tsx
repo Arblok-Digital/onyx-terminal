@@ -79,7 +79,6 @@ export default function Swap() {
   const [quoteLoading, setQuoteLoading] = useState(false);
   const [quoteError, setQuoteError] = useState("");
   const [refreshTick, setRefreshTick] = useState(0);
-  const [allowPump, setAllowPump] = useState(false);
   const [timeLeft, setTimeLeft] = useState(20);
 
   // Swap execution state
@@ -208,8 +207,7 @@ export default function Swap() {
     setPasteErr("");
     setPasteCa("");
     if (selected && selected.chainId === "solana" && selected.address) {
-      setToMint(selected.address);
-      setAllowPump(!!(selected as any).fromNewListing);
+      setToMint(selected.address); // Tidak perlu set allowPump lagi
     }
   }, [open, selected]);
 
@@ -234,22 +232,21 @@ export default function Swap() {
       outputMint: toMint,
       amount: String(amountRaw),
       slippageBps: String(slippageBps),
-      allowPump: String(allowPump),
     });
 
     const url = `${PROXY_BASE}/api/jup/quote?${params}`;
     fetch(url)
       .then((res) => {
         if (!res.ok) {
+          // Cek apakah response berupa JSON atau HTML error dari Vercel
           return res.text().then(text => {
-            let msg = `Server Error (${res.status})`;
             try {
               const json = JSON.parse(text);
-              if (json.error) msg = json.error;
+              throw new Error(json.error || "Quote failed");
             } catch {
-              if (res.status === 404) msg = "Endpoint proxy tidak ditemukan (404).";
+              // Jika teks bukan JSON, berarti dapet HTML (404/500)
+              throw new Error(`Server Error (${res.status}). Pastikan /api sudah terdeploy atau proxy lokal nyala.`);
             }
-            throw new Error(msg);
           });
         }
         return res.json();
@@ -269,7 +266,7 @@ export default function Swap() {
       });
 
     return () => { cancelled = true; };
-  }, [open, fromMint, toMint, amountRaw, slippage, refreshTick, allowPump]);
+  }, [open, fromMint, toMint, amountRaw, slippage, refreshTick]); // Hapus allowPump dari dependencies
 
   // Eksekusi swap
   const executeSwap = async () => {
@@ -338,8 +335,8 @@ export default function Swap() {
     }
     setPasteErr("");
     if (pasteTarget === "from") setFromMint(v); else setToMint(v);
-    // Reset Discovery Mode saat paste manual agar tidak "nyangkut" dari koin sebelumnya
-    setAllowPump(false); 
+    // Tidak perlu set allowPump lagi
+    // setAllowPump(false); 
     setPasteCa("");
   };
 
@@ -416,7 +413,6 @@ export default function Swap() {
             <div className={css.slotRow}>
               <select className={css.tokenSelect} value={fromMint} onChange={(e) => {
                 setFromMint(e.target.value);
-                setAllowPump(false); // Reset peringatan Discovery saat ganti token manual
               }}>
                 {renderTokenOptions()}
               </select>
@@ -433,7 +429,6 @@ export default function Swap() {
             <div className={css.slotRow}>
               <select className={css.tokenSelect} value={toMint} onChange={(e) => {
                 setToMint(e.target.value);
-                setAllowPump(false); // Reset peringatan Discovery saat ganti token manual
               }}>
                 {renderTokenOptions()}
               </select>
