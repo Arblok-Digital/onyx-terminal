@@ -10,7 +10,7 @@
  * @deps ui/Panel, feeds/dexscreener, core/store/price.store, core/store/ui.store,
  *       core/event-bus, utils/format, utils/chain, panels/discover/discover.config
  */
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import Panel from "@/ui/Panel";
 import { getLatestProfiles, getTokensBatch } from "@/feeds/dexscreener";
 import ShareButton from "@/components/ShareButton";
@@ -63,11 +63,15 @@ export default function Discover() {
   const tokens = usePriceStore((s) => s.tokens);
   const setActiveToken = useUIStore((s) => s.setActiveToken);
   const activeAddr = useUIStore((s) => s.activeToken?.address)?.toLowerCase() ?? null;
+  const isFetching = useRef(false);
 
   useEffect(() => {
     let stopped = false;
 
     async function tick() {
+      if (isFetching.current) return;
+      isFetching.current = true;
+
       try {
         // 1. Fetch semua sumber secara PARALEL
         const [list, trending, geckoData] = await Promise.all([
@@ -79,9 +83,11 @@ export default function Discover() {
         if (stopped) return;
 
         const trendingArr = Array.isArray(trending) ? trending : (trending?.boosts || []);
-        setProfiles(Array.isArray(list) ? list.slice(0, MAX_ROWS) : []);
-        setTrendingProfiles(trendingArr.slice(0, MAX_ROWS));
-        setGeckoProfiles(geckoData);
+        
+        // Hanya update state jika data berhasil ditarik (mencegah list kosong mendadak)
+        if (list.length > 0) setProfiles(list.slice(0, MAX_ROWS));
+        if (trendingArr.length > 0) setTrendingProfiles(trendingArr.slice(0, MAX_ROWS));
+        if (geckoData.length > 0) setGeckoProfiles(geckoData);
 
         // 2. Kumpulkan alamat dari Gecko untuk enrichment
         const geckoAddrs = geckoData.map((p: any) => {
@@ -115,6 +121,8 @@ export default function Discover() {
       } catch (e) {
         console.error("Main tick function failed:", e);
         if (!stopped) setLoading(false);
+      } finally {
+        isFetching.current = false;
       }
     }
 
@@ -148,12 +156,14 @@ export default function Discover() {
         const isMatch = chain === "all" || normalizeChain(r.profile.chainId) === chain;
         if (!isMatch) return false;
 
-        // Quality Filter for Signals:
-        // Kita longgarkan agar UI tidak kosong. Icon tidak lagi wajib.
+        // Robust Quality Filter:
+        // Gunakan data profile Gecko sebagai fallback pertama jika snap DexScreener belum mendarat
         const liq = r.snap?.liquidity ?? r.profile.liquidity ?? 0;
 
-        // Minimal likuiditas diturunkan ke $5k agar koin baru yang 'hot' tetap muncul
-        return liq >= 5000;
+        // Jika koin baru (loading), biarkan muncul dulu sebentar. 
+        // Jika sudah ada data tapi likuiditas < $3k, baru kita sembunyikan.
+        if (liq === 0) return true; 
+        return liq >= 3000;
       });
     }
 
