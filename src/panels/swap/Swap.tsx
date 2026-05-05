@@ -162,10 +162,18 @@ export default function Swap() {
   const fromResolved = useJupiterTokenInfo(fromMint);
 
   const tokenMap = useMemo(() => {
-    const m = {};
+    const m: Record<string, any> = {};
+    // 1. Masukkan koin-koin "Sepuh" (Big Cap) yang sudah kita hardcode
     for (const t of KNOWN_LIST) m[t.mint] = t;
-    if (toResolved) m[toResolved.mint] = toResolved;
-    if (fromResolved) m[fromResolved.mint] = fromResolved;
+
+    // 2. Tambahkan info dari Jupiter, tapi JANGAN timpa koin yang sudah ada
+    // kecuali koin yang sudah ada itu simbolnya masih 'UNKN'
+    if (toResolved && (!m[toResolved.mint] || (m[toResolved.mint].symbol === "UNKN" && toResolved.symbol !== "UNKN"))) {
+      m[toResolved.mint] = toResolved;
+    }
+    if (fromResolved && (!m[fromResolved.mint] || (m[fromResolved.mint].symbol === "UNKN" && fromResolved.symbol !== "UNKN"))) {
+      m[fromResolved.mint] = fromResolved;
+    }
     return m;
   }, [toResolved, fromResolved]);
 
@@ -479,12 +487,36 @@ export default function Swap() {
               </span>
 
               {/* Info Status untuk Token Baru/Unlisted */}
-              {(fromInfo?.symbol === "UNKN" || toInfo?.symbol === "UNKN") && (
-                <>
-                  <span className={css.metaLabel}>Token Status</span>
-                  <span className={`${css.metaValue} ${css.warn}`}>UNLISTED DISCOVERY</span>
-                </>
-              )}
+              {(() => {
+                const isToKnown = KNOWN_LIST.some(t => t.mint === toMint);
+                const isToPump = toMint.toLowerCase().endsWith("pump");
+                const hasToMeta = toInfo && toInfo.symbol !== "UNKN";
+
+                let statusLabel = "UNLISTED DISCOVERY";
+                let statusColor = "#9ca3af"; // Default muted gray
+                let statusClass = css.metaValue;
+
+                if (isToKnown) {
+                  statusLabel = "VERIFIED BLUECHIP";
+                  statusColor = "#3b82f6"; // Blue for established coins
+                } else if (!isToPump && hasToMeta) {
+                  statusLabel = "COMMUNITY VERIFIED (SAFE)";
+                  statusColor = "#2ecc71"; // Green for safe routes
+                } else if (isToPump) {
+                  statusLabel = "PUMP.FUN DEGEN";
+                  statusColor = "#f39c12"; // Orange for degens
+                  statusClass = `${css.metaValue} ${css.warn}`;
+                }
+
+                return (
+                  <>
+                    <span className={css.metaLabel}>Token Status</span>
+                    <span className={statusClass} style={{ color: statusColor, fontWeight: '800' }}>
+                      {statusLabel}
+                    </span>
+                  </>
+                );
+              })()}
 
               <span className={css.metaLabel}>Price impact</span>
               <span className={
