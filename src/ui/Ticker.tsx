@@ -21,6 +21,24 @@ export default function Ticker() {
   const sol = usePriceFor(SOL_MINT);
   const allTokens = usePriceStore((s) => s.tokens);
 
+  const [caInput, setCaInput] = useState("");
+
+  const handleCaSubmit = () => {
+    const val = caInput.trim();
+    if (!val) return;
+
+    // Deteksi Otomatis: 0x = EVM (Eth/Base), Selain itu Solana
+    const isEvm = val.startsWith("0x");
+    const chain = isEvm ? "ethereum" : "solana";
+
+    bus.emit("token:select", {
+      address: val,
+      chain: chain,
+      symbol: "UNKN"
+    });
+    setCaInput("");
+  };
+
   // Kalkulasi Market Sentiment (Bull/Bear Index)
   const marketSentiment = useMemo(() => {
     const tokens = Object.values(allTokens);
@@ -66,6 +84,46 @@ export default function Ticker() {
           <div className={styles.brandName}>ONYX</div>
           <div className={styles.brandSub}>Terminal</div>
         </div>
+      </div>
+
+      <div className={styles.divider} />
+
+      {/* Quick Search / CA Input */}
+      <div style={{ display: 'flex', alignItems: 'center', padding: '0 10px', gap: '6px' }}>
+        <input
+          type="text"
+          placeholder="PASTE CA..."
+          value={caInput}
+          onChange={(e) => setCaInput(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && handleCaSubmit()}
+          style={{
+            background: '#000',
+            border: '1px solid #374151',
+            color: '#fff',
+            fontSize: '10px',
+            padding: '2px 8px',
+            borderRadius: '2px',
+            width: '140px',
+            outline: 'none',
+            fontFamily: 'monospace',
+            textTransform: 'uppercase'
+          }}
+        />
+        <button 
+          onClick={handleCaSubmit}
+          style={{
+            background: '#1f2937',
+            border: '1px solid #374151',
+            color: '#3b82f6',
+            fontSize: '9px',
+            padding: '2px 6px',
+            borderRadius: '2px',
+            cursor: 'pointer',
+            fontWeight: '800'
+          }}
+        >
+          LOAD
+        </button>
       </div>
 
       <div className={styles.divider} />
