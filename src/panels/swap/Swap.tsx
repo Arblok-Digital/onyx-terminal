@@ -20,6 +20,7 @@ import {
 import { useUiStore } from "../../core/store/ui.store";
 import css from "./Swap.module.css";
 import { CONFIG } from "../../core/config";
+import { trackSwap } from "../../core/analytics";
 
 const KNOWN_LIST = Object.values(KNOWN_TOKENS);
 
@@ -316,6 +317,14 @@ export default function Swap() {
       });
 
       setSwapSuccess(signature);
+      
+      // Analytics: Track successful swap to Supabase
+      trackSwap(
+        fromInfo?.symbol || fromMint,
+        toInfo?.symbol || toMint,
+        Number(amount)
+      );
+
       setQuote(null);
     } catch (e) {
       setSwapError(e.message || "Swap gagal");
@@ -489,23 +498,22 @@ export default function Swap() {
               {/* Info Status untuk Token Baru/Unlisted */}
               {(() => {
                 const isToKnown = KNOWN_LIST.some(t => t.mint === toMint);
-                const isToPump = toMint.toLowerCase().endsWith("pump");
-                const hasToMeta = toInfo && toInfo.symbol !== "UNKN";
+                // Cek secara real-time apakah Jupiter merutekan transaksi ini via Pump.fun AMM
+                const hasPumpRoute = quote?.routePlan?.some(step => 
+                  step.swapInfo.label.toLowerCase().includes("pump")
+                );
 
-                let statusLabel = "UNLISTED DISCOVERY";
-                let statusColor = "#9ca3af"; // Default muted gray
+                let statusLabel = "COMMUNITY VERIFIED (SAFE)";
+                let statusColor = "#2ecc71"; // Hijau untuk rute umum (Raydium, Meteora, Orca)
                 let statusClass = css.metaValue;
 
-                if (isToKnown) {
-                  statusLabel = "VERIFIED BLUECHIP";
-                  statusColor = "#3b82f6"; // Blue for established coins
-                } else if (!isToPump && hasToMeta) {
-                  statusLabel = "COMMUNITY VERIFIED (SAFE)";
-                  statusColor = "#2ecc71"; // Green for safe routes
-                } else if (isToPump) {
+                if (hasPumpRoute) {
                   statusLabel = "PUMP.FUN DEGEN";
-                  statusColor = "#f39c12"; // Orange for degens
+                  statusColor = "#f39c12"; // Oranye untuk rute berisiko tinggi
                   statusClass = `${css.metaValue} ${css.warn}`;
+                } else if (isToKnown) {
+                  statusLabel = "VERIFIED BLUECHIP";
+                  statusColor = "#3b82f6"; // Biru untuk Big Caps (SOL, USDC, BONK, dll)
                 }
 
                 return (
