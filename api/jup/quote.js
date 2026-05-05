@@ -45,29 +45,34 @@ export default async function handler(req, res) {
     let response;
     try {
       // Prioritas 1: Tanpa Pump.fun
+      console.log("[API-QUOTE] Attempting Phase 1 (Excluded Pump.fun)");
       response = await axios.get(`${JUP_BASE_URL}/quote`, {
         params: {
           ...commonParams,
-          excludeDexes: "Pump.fun"
+          excludeDexes: "Pump.fun",
+          onlyDirectRoutes: false // Biar Jupiter tetep bisa hopping antar DEX mainstream
         },
         headers: {
           'x-api-key': JUP_API_KEY,
           'Accept': 'application/json'
         }
       });
-
-      if (!response.data || !response.data.routePlan || response.data.routePlan.length === 0) {
-        throw new Error("Fallback required");
-      }
     } catch (e) {
-      // Prioritas 2: Fallback (Semua DEX)
-      response = await axios.get(`${JUP_BASE_URL}/quote`, {
-        params: commonParams,
-        headers: {
-          'x-api-key': JUP_API_KEY,
-          'Accept': 'application/json'
-        }
-      });
+      const errorMsg = e.response?.data?.error || "";
+      // Hanya fallback jika benar-benar tidak ada rute selain pump.fun
+      if (errorMsg.toLowerCase().includes("no route") || !e.response) {
+        console.log("[API-QUOTE] Phase 1 failed, falling back to all DEXes");
+        response = await axios.get(`${JUP_BASE_URL}/quote`, {
+          params: commonParams,
+          headers: {
+            'x-api-key': JUP_API_KEY,
+            'Accept': 'application/json'
+          }
+        });
+      } else {
+        // Jika errornya Slippage, dsb. langsung return error original
+        return res.status(e.response?.status || 500).json(e.response?.data);
+      }
     }
 
     const quoteData = response.data;

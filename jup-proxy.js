@@ -77,7 +77,7 @@ app.get('/api/jup/quote', async (req, res) => {
     let response;
     try {
       // Attempt 1: High Priority - Cari rute TANPA Pump.fun
-      console.log(`[QUOTE-P1] Mencari rute prioritas (tanpa Pump.fun)...`);
+      console.log(`[QUOTE-P1] Mencari rute prioritas (Meteora/Raydium/Orca)...`);
       response = await axios.get(`${JUP_BASE_URL}/quote`, {
         params: {
           ...commonParams,
@@ -93,15 +93,25 @@ app.get('/api/jup/quote', async (req, res) => {
         throw new Error("No priority route");
       }
     } catch (e) {
-      // Attempt 2: Fallback - Cari rute mencakup semua DEX (termasuk Pump.fun)
-      console.log(`[QUOTE-P2] Rute prioritas gagal, fallback mencakup semua DEX...`);
-      response = await axios.get(`${JUP_BASE_URL}/quote`, {
-        params: commonParams,
-        headers: {
-          'x-api-key': JUP_API_KEY,
-          'Accept': 'application/json'
-        }
-      });
+      // 🔥 Perbaikan: Cek apakah errornya beneran karena rute gak ada, atau cuma slippage
+      const errorData = e.response?.data?.error || "";
+      const isNoRoute = errorData.toLowerCase().includes("no route") || e.message === "No priority route";
+
+      if (isNoRoute) {
+        console.log(`[QUOTE-P2] Rute prioritas tidak ada, fallback ke Pump.fun...`);
+        response = await axios.get(`${JUP_BASE_URL}/quote`, {
+          params: commonParams,
+          headers: {
+            'x-api-key': JUP_API_KEY,
+            'Accept': 'application/json'
+          }
+        });
+      } else {
+        // Kalau errornya Slippage atau API Error lainnya, jangan fallback, lempar aja biar user tau
+        const status = e.response?.status || 500;
+        console.error(`[QUOTE-P1-FAIL] Error bukan rute:`, errorData);
+        return res.status(status).json(e.response?.data || { error: e.message });
+      }
     }
 
     const quoteData = response.data;
