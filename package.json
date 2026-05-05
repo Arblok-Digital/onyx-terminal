@@ -63,7 +63,11 @@
     "zod": "^3.23.8"
   },
   "dependencies": {
-    "@solana/web3.js": "^1.98.0",
+    "@solana/wallet-adapter-base": "^0.9.27",
+    "@solana/wallet-adapter-react": "^0.15.39",
+    "@solana/wallet-adapter-react-ui": "^0.9.39",
+    "@solana/wallet-adapter-wallets": "^0.19.38",
+    "@solana/web3.js": "^1.98.4",
     "@supabase/supabase-js": "^2.48.1",
     "axios": "^1.16.0",
     "buffer": "^6.0.3",

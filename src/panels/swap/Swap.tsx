@@ -11,7 +11,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Buffer } from "buffer";
-import { VersionedTransaction, Connection } from "@solana/web3.js";
+import { VersionedTransaction, Connection, PublicKey } from "@solana/web3.js";
+import { useWallet } from "@solana/wallet-adapter-react";
 import {
   useJupiterTokenInfo,
   KNOWN_TOKENS,
@@ -87,75 +88,25 @@ export default function Swap() {
   const [swapError, setSwapError] = useState("");
   const [swapSuccess, setSwapSuccess] = useState("");
 
-  // Manual Wallet State
-  const [wallet, setWallet] = useState<string | null>(null);
-  const [activeProvider, setActiveProvider] = useState<any>(null);
-  const [activeWalletName, setActiveWalletName] = useState("");
-  const [detectedWallets, setDetectedWallets] = useState<any[]>([]);
+  // Solana Wallet Adapter Hook
+  const { 
+    publicKey, 
+    wallet, 
+    disconnect, 
+    select, 
+    wallets, 
+    signTransaction 
+  } = useWallet();
+
   const [showMenu, setShowMenu] = useState(false);
 
-  // Detect available wallets on mount
-  useEffect(() => {
-    if (!open) return;
-    const win = window as any;
-    const found: any[] = [];
-    
-    // 1. Cek Solflare
-    if (win.solflare) found.push({ id: 'solflare', name: 'Solflare', p: win.solflare });
-    
-    // 2. Cek Backpack (Sering disebut Jup Wallet)
-    if (win.backpack) found.push({ id: 'backpack', name: 'Backpack', p: win.backpack });
-    
-    // 3. Cek window.solana (Phantom atau wallet standar lainnya)
-    if (win.solana && !found.some(w => w.p === win.solana)) {
-      const name = win.solana.isPhantom ? 'Phantom' : 'Solana Wallet';
-      found.push({ id: 'solana', name, p: win.solana });
-    }
-
-    setDetectedWallets(found);
-
-    // Auto-connect attempt for trusted wallets
-    found.forEach(item => {
-      item.p.connect({ onlyIfTrusted: true })
-        .then((res: any) => {
-          if (res?.publicKey && !wallet) {
-            setWallet(res.publicKey.toString());
-            setActiveProvider(item.p);
-            setActiveWalletName(item.name);
-          }
-        })
-        .catch(() => {});
-    });
-  }, [open, wallet]);
-
-  const connectTo = async (item: any) => {
-    try {
-      const resp = await item.p.connect();
-      setWallet(resp.publicKey.toString());
-      setActiveProvider(item.p);
-      setActiveWalletName(item.name);
-      setShowMenu(false);
-    } catch (e) {
-      console.error("Connection error", e);
-    }
-  };
-
-  const disconnectWallet = () => {
-    setWallet(null);
-    setActiveProvider(null);
-    setActiveWalletName("");
+  const connectTo = (walletAdapter: any) => {
+    select(walletAdapter.adapter.name);
+    setShowMenu(false);
   };
 
   const handleConnectClick = () => {
-    if (detectedWallets.length === 0) {
-      alert("No Solana wallet found! Please install Phantom, Solflare or Backpack.");
-      return;
-    }
-    if (detectedWallets.length === 1) {
-      connectTo(detectedWallets[0]);
-    } else {
-      setShowMenu(!showMenu);
-    }
+    setShowMenu(!showMenu);
   };
 
   // Resolve token info
@@ -279,8 +230,7 @@ export default function Swap() {
 
   // Eksekusi swap
   const executeSwap = async () => {
-    const provider = activeProvider;
-    if (!quote || !wallet || !provider) return;
+    if (!quote || !publicKey || !signTransaction) return;
     
     setSwapping(true);
     setSwapError("");
@@ -292,7 +242,7 @@ export default function Swap() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           quoteResponse: quote,
-          userPublicKey: wallet,
+          userPublicKey: publicKey.toBase58(),
           wrapAndUnwrapSol: true,
         }),
       });
@@ -308,7 +258,7 @@ export default function Swap() {
       const transaction = VersionedTransaction.deserialize(Buffer.from(swapTransaction, "base64"));
       
       // Sign transaksi
-      const signed = await provider.signTransaction(transaction);
+      const signed = await signTransaction(transaction);
       
       // Kirim via RPC (Gunakan Helius dari config)
       const connection = new Connection(CONFIG.HELIUS_RPC(CONFIG.HELIUS_API_KEY));
@@ -403,23 +353,28 @@ export default function Swap() {
         <div className={css.body}>
           {/* Wallet status */}
           <div className={css.walletStatus}>
-            {wallet && activeProvider ? (
+            {publicKey ? (
               <div className={css.walletInfo}>
-                <span className={css.walletOk}>🟢 {shortMint(wallet)} ({activeWalletName})</span>
-                <button onClick={disconnectWallet} className={css.disconnectBtn}>Disconnect</button>
+                <span className={css.walletOk}>🟢 {shortMint(publicKey.toBase58())} ({wallet?.adapter.name})</span>
+                <button onClick={() => disconnect()} className={css.disconnectBtn}>Disconnect</button>
               </div>
             ) : showMenu ? (
-              <div className={css.walletInfo} style={{ gap: '4px' }}>
-                {detectedWallets.map(w => (
-                  <button key={w.id} onClick={() => connectTo(w)} className={css.disconnectBtn} style={{ borderColor: 'var(--accent)', color: 'var(--accent)' }}>
-                    {w.name}
+              <div className={css.walletInfo} style={{ gap: '4px', flexWrap: 'wrap' }}>
+                {wallets.map(w => (
+                  <button 
+                    key={w.adapter.name} 
+                    onClick={() => connectTo(w)} 
+                    className={css.disconnectBtn} 
+                    style={{ borderColor: 'var(--accent)', color: 'var(--accent)' }}
+                  >
+                    {w.adapter.name}
                   </button>
                 ))}
                 <button onClick={() => setShowMenu(false)} className={css.disconnectBtn}>×</button>
               </div>
             ) : (
               <button onClick={handleConnectClick} className={`${css.btn} ${css.ghost}`}>
-                {detectedWallets.length > 0 ? 'Connect Wallet' : 'No Wallet Detected'}
+                Connect Wallet
               </button>
             )}
           </div>
@@ -570,13 +525,13 @@ export default function Swap() {
           {/* Action buttons */}
           <div className={css.actions}>
             <button className={`${css.btn} ${css.ghost}`} onClick={close}>Cancel</button>
-            <button className={css.btn} disabled={swapping || !quote || !wallet} onClick={executeSwap}>
+            <button className={css.btn} disabled={swapping || !quote || !publicKey} onClick={executeSwap}>
               {swapping ? "Swapping…" : "Swap Now"}
             </button>
           </div>
 
           <div className={css.hint}>
-            {wallet ? "Konfirmasi transaksi di wallet Anda. Rute dioptimalkan otomatis untuk eksekusi terbaik." : "Connect Wallet untuk memulai swap."}
+            {publicKey ? "Konfirmasi transaksi di wallet Anda. Rute dioptimalkan otomatis untuk eksekusi terbaik." : "Connect Wallet untuk memulai swap."}
           </div>
         </div>
 
