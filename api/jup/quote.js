@@ -32,21 +32,43 @@ export default async function handler(req, res) {
       if (!isNaN(parsed)) manualSlippageBps = parsed;
     }
 
-    const response = await axios.get(`${JUP_BASE_URL}/quote`, {
-      params: {
-        inputMint,
-        outputMint,
-        amount,
-        ...(isAuto 
-          ? { autoSlippage: true, autoSlippageCollisionUsdValue: 1000 } 
-          : { slippageBps: manualSlippageBps }),
-        platformFeeBps
-      },
-      headers: {
-        'x-api-key': JUP_API_KEY,
-        'Accept': 'application/json'
+    const commonParams = {
+      inputMint,
+      outputMint,
+      amount,
+      ...(isAuto 
+        ? { autoSlippage: true, autoSlippageCollisionUsdValue: 1000 } 
+        : { slippageBps: manualSlippageBps }),
+      platformFeeBps
+    };
+
+    let response;
+    try {
+      // Prioritas 1: Tanpa Pump.fun
+      response = await axios.get(`${JUP_BASE_URL}/quote`, {
+        params: {
+          ...commonParams,
+          excludeDexes: "Pump.fun"
+        },
+        headers: {
+          'x-api-key': JUP_API_KEY,
+          'Accept': 'application/json'
+        }
+      });
+
+      if (!response.data || !response.data.routePlan || response.data.routePlan.length === 0) {
+        throw new Error("Fallback required");
       }
-    });
+    } catch (e) {
+      // Prioritas 2: Fallback (Semua DEX)
+      response = await axios.get(`${JUP_BASE_URL}/quote`, {
+        params: commonParams,
+        headers: {
+          'x-api-key': JUP_API_KEY,
+          'Accept': 'application/json'
+        }
+      });
+    }
 
     const quoteData = response.data;
 

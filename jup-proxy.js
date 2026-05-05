@@ -50,8 +50,7 @@ app.get('/api/jup/quote', async (req, res) => {
     const isOutputTarget = (outputMint === MINTS.WSOL || outputMint === MINTS.USDC);
     const platformFeeBps = (isInputTarget || isOutputTarget) ? 50 : 0;
 
-    const shouldBlockPump = allowPump !== 'true';
-    console.log(`Quote Request: In=${inputMint}, Out=${outputMint}, AllowPump=${!shouldBlockPump}`);
+    console.log(`Quote Request: In=${inputMint}, Out=${outputMint}`);
 
     // 🔥 FIX: Handle Auto Slippage lebih robust (trim & lowercase)
     const isAuto = typeof slippageBps === 'string' && slippageBps.toLowerCase().trim() === 'auto';
@@ -65,21 +64,45 @@ app.get('/api/jup/quote', async (req, res) => {
 
     console.log(`[QUOTE] In: ${inputMint.slice(0,4)}... Out: ${outputMint.slice(0,4)}... Amt: ${amount}`);
 
-    const response = await axios.get(`${JUP_BASE_URL}/quote`, {
-      params: {
-        inputMint,
-        outputMint,
-        amount,
-        ...(isAuto 
-          ? { autoSlippage: true, autoSlippageCollisionUsdValue: 1000 } 
-          : { slippageBps: manualSlippageBps }),
-        platformFeeBps // Tidak ada excludeDexes di sini
-      },
-      headers: {
-        'x-api-key': JUP_API_KEY,
-        'Accept': 'application/json'
+    const commonParams = {
+      inputMint,
+      outputMint,
+      amount,
+      ...(isAuto 
+        ? { autoSlippage: true, autoSlippageCollisionUsdValue: 1000 } 
+        : { slippageBps: manualSlippageBps }),
+      platformFeeBps
+    };
+
+    let response;
+    try {
+      // Attempt 1: High Priority - Cari rute TANPA Pump.fun
+      console.log(`[QUOTE-P1] Mencari rute prioritas (tanpa Pump.fun)...`);
+      response = await axios.get(`${JUP_BASE_URL}/quote`, {
+        params: {
+          ...commonParams,
+          excludeDexes: "Pump.fun"
+        },
+        headers: {
+          'x-api-key': JUP_API_KEY,
+          'Accept': 'application/json'
+        }
+      });
+
+      if (!response.data || !response.data.routePlan || response.data.routePlan.length === 0) {
+        throw new Error("No priority route");
       }
-    });
+    } catch (e) {
+      // Attempt 2: Fallback - Cari rute mencakup semua DEX (termasuk Pump.fun)
+      console.log(`[QUOTE-P2] Rute prioritas gagal, fallback mencakup semua DEX...`);
+      response = await axios.get(`${JUP_BASE_URL}/quote`, {
+        params: commonParams,
+        headers: {
+          'x-api-key': JUP_API_KEY,
+          'Accept': 'application/json'
+        }
+      });
+    }
 
     const quoteData = response.data;
 
