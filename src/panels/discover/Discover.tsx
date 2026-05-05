@@ -33,9 +33,28 @@ type Tab = "listings" | "signals" | "trending";
 
 const SHARE_URL = "https://onyx-terminal-v1.vercel.app";
 
+async function fetchGeckoTerminalPools() {
+  try {
+    const response = await fetch(
+      "https://api.geckoterminal.com/api/v2/networks/solana/trending_pools"
+    );
+    if (!response.ok) {
+      console.warn("[Discover] Gecko API Error:", response.status);
+      return [];
+    }
+    const json = await response.json();
+    console.log("[Discover] Gecko Data Fetched:", json.data?.length || 0, "pools");
+    return json?.data || [];
+  } catch (error) {
+    console.error("GeckoTerminal fetch error:", error);
+    return [];
+  }
+}
+
 export default function Discover() {
   const [profiles, setProfiles] = useState<TokenProfile[]>([]);
   const [trendingProfiles, setTrendingProfiles] = useState<TokenProfile[]>([]);
+  const [geckoProfiles, setGeckoProfiles] = useState<any[]>([]);
   const [tab, setTab] = useState<Tab>("listings");
   const [chain, setChain] = useState<(typeof CHAIN_FILTERS)[number]["id"]>("all");
   const [loading, setLoading] = useState(true);
@@ -45,14 +64,28 @@ export default function Discover() {
   const setActiveToken = useUIStore((s) => s.setActiveToken);
   const activeAddr = useUIStore((s) => s.activeToken?.address)?.toLowerCase() ?? null;
 
-  // Poll DexScreener token-profiles + enrich
   useEffect(() => {
     let stopped = false;
 
     async function tick() {
       try {
-        // Pipeline: Fetch data listings dan trending secara independen
-        // Pakai .catch biar kalau salah satu gagal, yang lain tetep jalan
+        let currentGeckoAddrs: string[] = [];
+        
+        // Aktifkan fetching Gecko untuk Signals DAN Trending
+        if (tab === 'signals' || tab === 'trending') {
+          const geckoData = await fetchGeckoTerminalPools();
+          if (!stopped) {
+            setGeckoProfiles(geckoData);
+            // Bersihkan prefix 'solana_' dari base_token_id agar DexScreener kenal
+            currentGeckoAddrs = geckoData.map((p: any) => {
+              // Cek relationships.base_token.data.id (standar Gecko V2)
+              const id = p.relationships?.base_token?.data?.id || p.attributes?.base_token_id || "";
+              return id.includes('_') ? id.split('_')[1] : id;
+            }).filter(Boolean);
+            console.log("[Discover] Signals Enrichment List:", currentGeckoAddrs.length, "mints");
+          }
+        }
+
         const [list, trending] = await Promise.all([
           getLatestProfiles().catch(() => []),
           fetch("https://api.dexscreener.com/token-boosts/top/v1").then(res => res.json()).catch(() => [])
@@ -60,40 +93,42 @@ export default function Discover() {
 
         if (stopped) return;
 
-        // Arsitektur: Ekstraksi data Trending yang lebih aman
         const trendingArr = Array.isArray(trending) ? trending : (trending?.boosts || []);
         const trimmedList = Array.isArray(list) ? list.slice(0, MAX_ROWS) : [];
         const trimmedTrending = trendingArr.slice(0, MAX_ROWS);
 
-        // Update metadata profiles segera
         setProfiles(trimmedList);
         setTrendingProfiles(trimmedTrending);
 
-        // Pipeline: Konsolidasi alamat untuk Enrichment (Market Data)
-        // Kita ambil semua (up to 60) karena batch fetch sanggup handle
-        const allProfiles = [...trimmedList, ...trimmedTrending];
+        // Gunakan currentGeckoAddrs yang baru di-fetch agar enrichment langsung jalan tanpa nunggu render cycle berikutnya
+        const allProfiles = [
+          ...trimmedList, 
+          ...trimmedTrending, 
+          ...currentGeckoAddrs.map(a => ({ tokenAddress: a }))
+        ];
+        
         const addrs = Array.from(new Set(
-          allProfiles.map(p => p?.tokenAddress).filter(Boolean)
+          allProfiles.map(p => (typeof p === 'string' ? p : p?.tokenAddress)).filter(Boolean)
         )).slice(0, 60); 
 
         if (addrs.length > 0) {
-          try { // Start of inner try block for getTokensBatch
+          try {
             const snaps = await getTokensBatch(addrs.slice(0, 30));
             const snaps2 = addrs.length > 30 ? await getTokensBatch(addrs.slice(30, 60)) : [];
             
             const combinedSnaps = [...snaps, ...snaps2];
-
+            console.log("[Discover] Enrichment success:", combinedSnaps.length, "snapshots returned");
+            
             if (!stopped && combinedSnaps.length > 0) {
               usePriceStore.getState().upsertMany(combinedSnaps);
             }
-          } catch (e) { // Catch for getTokensBatch
-            console.error("Enrichment failure during batch fetch:", e);
-            /* enrichment failure ok — list still renders with partial data */
+          } catch (e) {
+            console.error("Batch fetch error:", e);
           }
         }
         setUpdatedAt(Date.now());
         setLoading(false);
-      } catch (e) { // Main tick() catch
+      } catch (e) {
         console.error("Main tick function failed:", e);
         if (!stopped) setLoading(false);
       }
@@ -105,44 +140,125 @@ export default function Discover() {
       stopped = true;
       window.clearInterval(id);
     };
-  }, []);
+  }, [tab]); // Re-run tick when tab changes to switch pipelines
 
-  // Build hydrated rows (snap + profile metadata) filtered by chain
   type Row = { profile: TokenProfile; snap: TokenSnapshot | undefined };
   const rows = useMemo<Row[]>(() => {
-    const source = tab === "trending" ? trendingProfiles : profiles;
-    if (!source || !Array.isArray(source)) return [];
+    if (tab === "signals") {
+      return geckoProfiles.map(pool => {
+        // Samakan logika pengambilan alamat mint di sini
+        const rawId = pool.relationships?.base_token?.data?.id || pool.attributes?.base_token_id || "";
+        const address = rawId.includes('_') ? rawId.split('_')[1] : (pool.attributes?.address || "");
+        
+        const profile: TokenProfile = {
+          tokenAddress: address,
+          chainId: pool.attributes?.chain_id || "solana",
+          icon: pool.attributes?.image_url || "",
+          symbol: pool.attributes?.symbol || "",
+          priceUsd: parseFloat(pool.attributes?.base_token_price_usd || "0"),
+          volume24h: parseFloat(pool.attributes?.volume_usd || "0"),
+          liquidity: parseFloat(pool.attributes?.reserve_in_usd || "0")
+        };
+        return { profile, snap: tokens[address?.toLowerCase()] };
+      }).filter(r => {
+        const isMatch = chain === "all" || normalizeChain(r.profile.chainId) === chain;
+        if (!isMatch) return false;
 
-    return source
+        // Quality Filter for Signals:
+        // Kita longgarkan agar UI tidak kosong. Icon tidak lagi wajib.
+        const liq = r.snap?.liquidity ?? r.profile.liquidity ?? 0;
+
+        // Minimal likuiditas diturunkan ke $5k agar koin baru yang 'hot' tetap muncul
+        return liq >= 5000;
+      });
+    }
+
+    // Logika Gabungan untuk Tab Trending
+    if (tab === "trending") {
+      const combined: Row[] = [];
+
+      // 1. Masukkan dari DexScreener
+      trendingProfiles.forEach(p => {
+        combined.push({
+          profile: p,
+          snap: tokens[p.tokenAddress.toLowerCase()]
+        });
+      });
+
+      // 2. Masukkan dari GeckoTerminal
+      geckoProfiles.forEach(pool => {
+        const rawId = pool.relationships?.base_token?.data?.id || pool.attributes?.base_token_id || "";
+        const address = rawId.includes('_') ? rawId.split('_')[1] : (pool.attributes?.address || "");
+        
+        const prof: TokenProfile = {
+          tokenAddress: address,
+          chainId: pool.attributes?.chain_id || "solana",
+          icon: "", 
+          symbol: pool.attributes?.symbol || "",
+          priceUsd: parseFloat(pool.attributes?.base_token_price_usd || "0"),
+          volume24h: parseFloat(pool.attributes?.volume_usd || "0"),
+          liquidity: parseFloat(pool.attributes?.reserve_in_usd || "0")
+        };
+
+        combined.push({
+          profile: prof,
+          snap: tokens[address?.toLowerCase()]
+        });
+      });
+
+      // Filter hanya berdasarkan Chain, hapus filter Safety DEX agar tidak sepi
+      return combined.filter(r => {
+        const ch = normalizeChain(r.profile.chainId);
+        return chain === "all" || ch === chain;
+      });
+    }
+
+    if (!profiles || !Array.isArray(profiles)) return [];
+
+    return profiles
       .filter((p) => {
         if (!p || !p.tokenAddress) return false;
         const ch = normalizeChain(p.chainId);
         const isMatch = chain === "all" || ch === chain;
 
-        // Tab Listings: Bebas hambatan (Kebebasan Degen)
         if (tab === "listings") return isMatch;
-
-        // Tab Trending & Signals: Gunakan data DexScreener untuk filter "Safe Pool"
-        const snap = tokens[p.tokenAddress.toLowerCase()];
-        if (!snap) return isMatch; // Tampilkan aja kalau data market belum load lengkap
-
-        // List DEX yang kita anggap "Stabil/Terintegrasi"
-        // Tambahin dexId Pump.fun juga kalau mau ditampilkan di trending/signals
-        const safeDexes = ['raydium', 'orca', 'meteora', 'lifinity', 'phoenix', 'pump.fun amm']; // 'pump.fun amm' ditambahkan
-        const isSafePool = safeDexes.includes(snap.dexId?.toLowerCase() || "");
-
-        return isMatch && isSafePool;
+        return isMatch;
       })
       .map((p) => ({
         profile: p,
         snap: tokens[p.tokenAddress.toLowerCase()],
       }));
-  }, [profiles, trendingProfiles, tokens, chain, tab]);
+  }, [profiles, trendingProfiles, geckoProfiles, tokens, chain, tab]);
 
   const signalRows = useMemo(() => {
     return rows
-      .filter((r): r is Row & { snap: TokenSnapshot } => Boolean(r.snap))
-      .map((r) => ({ ...computeSignal(r.snap), profile: r.profile }))
+      .map((r) => {
+        // Jika snap (DexScreener) belum ada, kita buat "Gecko-Snapshot" agar Signal langsung muncul
+        if (!r.snap) {
+          const geckoSnap: TokenSnapshot = {
+            address: r.profile.tokenAddress,
+            symbol: r.profile.symbol,
+            name: '',
+            chain: r.profile.chainId as ChainId,
+            priceUsd: r.profile.priceUsd,
+            volume24h: r.profile.volume24h,
+            liquidity: r.profile.liquidity,
+            // Karena Gecko v2 trending pools tidak kasih vol 5m secara eksplisit, 
+            // kita asumsikan koin trending pasti punya aktivitas.
+            volume5m: r.profile.volume24h / 288, 
+            volume1h: r.profile.volume24h / 24,
+            priceChange1h: 0,
+            txns5m: { buys: 5, sells: 2 } // Mock data biar score tidak 0
+          };
+
+          return {
+            ...computeSignal(geckoSnap),
+            profile: r.profile,
+            hot: false // Belum HOT sampai data DexScreener valid masuk
+          };
+        }
+        return { ...computeSignal(r.snap), profile: r.profile };
+      })
       .sort((a, b) => b.score - a.score);
   }, [rows]);
 
@@ -209,7 +325,12 @@ export default function Discover() {
 
         <div className={styles.tableWrap}>
           {tab === "listings" || tab === "trending" ? (
-            <ListingsTable rows={rows} onSelect={handleSelect} activeAddr={activeAddr} />
+            <ListingsTable 
+              rows={rows} 
+              onSelect={handleSelect} 
+              activeAddr={activeAddr} 
+              isTrending={tab === "trending"}
+            />
           ) : (
             <SignalsTable
               rows={signalRows}
@@ -231,7 +352,9 @@ export default function Discover() {
           <span className={styles.dot} />
           <span>updated {ago}</span>
           <span className={styles.spacer} />
-          <span className={styles.muted}>DEXSCREENER PROFILES</span>
+          <span className={styles.muted}>
+            {tab === "signals" ? "GECKOTERMINAL TRENDING" : "DEXSCREENER PROFILES"}
+          </span>
         </div>
       </div>
     </Panel>
@@ -244,10 +367,12 @@ function ListingsTable({
   rows,
   onSelect,
   activeAddr,
+  isTrending,
 }: {
   rows: { profile: TokenProfile; snap: TokenSnapshot | undefined }[];
   onSelect: (addr: string, chain: string, sym?: string) => void;
   activeAddr: string | null;
+  isTrending?: boolean;
 }) {
   return (
     <table className={styles.table}>
@@ -284,11 +409,11 @@ function ListingsTable({
               }
             >
               <td className={styles.tdToken}>
-                {r.profile.icon ? (
+                {!isTrending && (r.profile.icon ? (
                   <img className={styles.icon} src={r.profile.icon} alt="" loading="lazy" />
                 ) : (
                   <span className={styles.iconFallback} />
-                )}
+                ))}
                 <div className={styles.tokenText}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                     <div className={styles.symbol}>{sym}</div>
@@ -303,7 +428,7 @@ function ListingsTable({
                 </span>
               </td>
               <td className={styles.tdRight}>
-                {r.snap?.priceUsd !== undefined ? formatPrice(r.snap.priceUsd) : "—"}
+                {formatPrice(r.snap?.priceUsd ?? r.profile.priceUsd ?? 0)}
               </td>
               <td
                 className={`${styles.tdRight} ${
@@ -313,7 +438,7 @@ function ListingsTable({
                 {ch !== undefined ? formatPercent(ch) : "—"}
               </td>
               <td className={styles.tdRight}>
-                {r.snap?.liquidity !== undefined ? formatUsd(r.snap.liquidity) : "—"}
+                {formatUsd(r.snap?.liquidity ?? r.profile.liquidity ?? 0)}
               </td>
             </tr>
           );
