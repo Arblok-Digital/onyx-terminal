@@ -81,6 +81,8 @@ export default function Swap() {
   const [quoteLoading, setQuoteLoading] = useState(false);
   const [quoteError, setQuoteError] = useState("");
   const [refreshTick, setRefreshTick] = useState(0);
+  const [isSafeLocked, setIsSafeLocked] = useState(false);
+  const [balances, setBalances] = useState<Record<string, number>>({});
   const [timeLeft, setTimeLeft] = useState(20);
 
   // Swap execution state
@@ -108,6 +110,56 @@ export default function Swap() {
   const handleConnectClick = () => {
     setShowMenu(!showMenu);
   };
+
+  // Fetch Balances (SOL & SPL)
+  useEffect(() => {
+    // Pengecekan ketat: pastikan publicKey valid dan memiliki method toBase58
+    if (!open || !publicKey || typeof publicKey.toBase58 !== 'function') {
+      if (!publicKey) setBalances({});
+      return;
+    }
+
+    const fetchAllBalances = async () => {
+      try {
+        const connection = new Connection(CONFIG.HELIUS_RPC(CONFIG.HELIUS_API_KEY));
+        const newBalances: Record<string, number> = {};
+
+        // 1. Fetch SOL Balance secara aman
+        try {
+          const solBal = await connection.getBalance(publicKey);
+          newBalances[KNOWN_TOKENS.SOL.mint] = solBal / 1e9;
+        } catch (e) {
+          console.warn("Gagal fetch saldo SOL:", e);
+        }
+
+        // 2. Fetch SPL Balances (Legacy & Token2022)
+        try {
+          const TOKEN_PROGRAM_ID = new PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
+          const TOKEN_2022_PROGRAM_ID = new PublicKey("TokenzQdBNbLqP5VEhdkTh4GE7qS9E3SSYkw7VPTNV");
+
+          const [spl, spl2022] = await Promise.all([
+            connection.getParsedTokenAccountsByOwner(publicKey, { programId: TOKEN_PROGRAM_ID }),
+            connection.getParsedTokenAccountsByOwner(publicKey, { programId: TOKEN_2022_PROGRAM_ID })
+          ]);
+
+          [...spl.value, ...spl2022.value].forEach((acc) => {
+            const info = acc.account.data.parsed.info;
+            if (info && info.mint) {
+              newBalances[info.mint] = info.tokenAmount.uiAmount || 0;
+            }
+          });
+        } catch (e) {
+          console.warn("Gagal fetch saldo token SPL:", e);
+        }
+
+        setBalances(newBalances);
+      } catch (err) {
+        console.error("Failed to fetch wallet balances:", err);
+      }
+    };
+
+    fetchAllBalances();
+  }, [open, publicKey, refreshTick]);
 
   // Resolve token info
   const toResolved = useJupiterTokenInfo(toMint);
@@ -169,6 +221,7 @@ export default function Swap() {
     if (selected && selected.chainId === "solana" && selected.address) {
       setToMint(selected.address); // Tidak perlu set allowPump lagi
     }
+    setIsSafeLocked(false);
   }, [open, selected]);
 
   // Fetch quote via proxy
@@ -177,13 +230,19 @@ export default function Swap() {
 
     if (!open || !fromMint || !toMint || !amountRaw) {
       if (!cancelled) setQuote(null);
+      setIsSafeLocked(false);
       return;
     }
 
     setQuoteLoading(true);
     setQuoteError("");
-    // 🔥 Hapus UI jalur rout lama segera jika koin diganti (Real-time reset)
-    setQuote(prev => (prev?.inputMint !== fromMint || prev?.outputMint !== toMint) ? null : prev);
+    
+    // Anti-Flicker: Jangan hapus quote lama saat refresh harga agar UI tidak "mental"
+    setQuote(prev => {
+      if (!prev) return null;
+      if (prev.inputMint !== fromMint || prev.outputMint !== toMint) return null;
+      return prev;
+    });
 
     const slippageBps = Math.floor(Number(slippage) * 100) || 50;
 
@@ -192,6 +251,7 @@ export default function Swap() {
       outputMint: toMint,
       amount: String(amountRaw),
       slippageBps: String(slippageBps),
+      isSafeLocked: String(isSafeLocked)
     });
 
     const url = `${PROXY_BASE}/api/jup/quote?${params}`;
@@ -212,7 +272,14 @@ export default function Swap() {
         return res.json();
       })
       .then((data) => {
-        if (!cancelled) setQuote(data);
+        if (!cancelled) {
+          setQuote(data);
+          // Cek rute: Jika tidak lewat Pump.fun, kunci jalurnya!
+          const hasPump = data.routePlan?.some((step: any) => 
+            step.swapInfo.label.toLowerCase().includes("pump")
+          );
+          if (!hasPump && data.routePlan?.length > 0) setIsSafeLocked(true);
+        }
       })
       .catch((err) => {
         console.error("Fetch error details:", err);
@@ -311,20 +378,46 @@ export default function Swap() {
 
   const renderTokenOptions = () => {
     const opts = [];
-    // 1. Render KNOWN_TOKENS (SOL, USDC, etc)
-    for (const t of KNOWN_LIST) {
-      opts.push(<option key={t.mint} value={t.mint}>{t.symbol}</option>);
+    const knownMints = new Set(KNOWN_LIST.map(t => t.mint));
+
+    // 1. Group: Koin Umum (SOL, USDC, dll)
+    opts.push(
+      <optgroup key="common" label="COMMON TOKENS">
+        {KNOWN_LIST.map(t => (
+          <option key={t.mint} value={t.mint}>{t.symbol}</option>
+        ))}
+      </optgroup>
+    );
+
+    // 2. Group: Koin di Wallet (Saldo > 0)
+    const walletOpts = [];
+    Object.entries(balances).forEach(([mint, amount]) => {
+      if (amount <= 0 || knownMints.has(mint)) return;
+      
+      const info = tokenMap[mint];
+      const label = info && info.symbol !== "UNKN" 
+        ? `${info.symbol} (${amount.toLocaleString()})`
+        : `${shortMint(mint)} (${amount.toLocaleString()})`;
+        
+      walletOpts.push(<option key={mint} value={mint}>{label}</option>);
+    });
+
+    if (walletOpts.length > 0) {
+      opts.push(<optgroup key="wallet" label="YOUR WALLET">{walletOpts}</optgroup>);
     }
-    // 2. Render Custom tokens from map (CA based)
-    for (const t of Object.values(tokenMap)) {
-      if (KNOWN_TOKENS[t.symbol]?.mint === t.mint) continue;
+
+    // 3. Group: Custom / Hasil Paste CA (Tanpa Saldo)
+    const customOpts = [];
+    Object.values(tokenMap).forEach((t: any) => {
+      if (knownMints.has(t.mint) || (balances[t.mint] && balances[t.mint] > 0)) return;
       const label = (t.symbol && t.symbol !== "UNKN") ? `${t.symbol} · ${shortMint(t.mint)}` : shortMint(t.mint);
-      opts.push(
-        <option key={t.mint} value={t.mint}>
-          {label}
-        </option>
-      );
+      customOpts.push(<option key={t.mint} value={t.mint}>{label}</option>);
+    });
+
+    if (customOpts.length > 0) {
+      opts.push(<optgroup key="custom" label="RECENT / CUSTOM">{customOpts}</optgroup>);
     }
+
     return opts;
   };
 
@@ -381,7 +474,23 @@ export default function Swap() {
 
           {/* FROM */}
           <div className={css.slot}>
-            <span className={css.slotLabel}>From {getTokenLabel(fromInfo)}</span>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+              <span className={css.slotLabel}>From {getTokenLabel(fromInfo)}</span>
+              {publicKey && balances[fromMint] !== undefined && (
+                <span 
+                  className={css.metaValue} 
+                  style={{ cursor: 'pointer', fontSize: '10px', color: 'var(--accent)', opacity: 0.8 }}
+                  onClick={() => {
+                    const bal = balances[fromMint];
+                    // Jika SOL, sisakan sedikit (0.005) buat fee transaksi agar tidak error
+                    const safeAmt = fromMint === KNOWN_TOKENS.SOL.mint ? Math.max(0, bal - 0.005) : bal;
+                    setAmount(String(safeAmt));
+                  }}
+                >
+                  Wallet: {balances[fromMint].toLocaleString(undefined, { maximumFractionDigits: 6 })}
+                </span>
+              )}
+            </div>
             <div className={css.slotRow}>
               <select className={css.tokenSelect} value={fromMint} onChange={(e) => {
                 setFromMint(e.target.value);
@@ -397,7 +506,14 @@ export default function Swap() {
 
           {/* TO */}
           <div className={css.slot}>
-            <span className={css.slotLabel}>To {quoteLoading && "(quoting…)"} {getTokenLabel(toInfo)}</span>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+              <span className={css.slotLabel}>To {quoteLoading && "(quoting…)"} {getTokenLabel(toInfo)}</span>
+              {publicKey && balances[toMint] !== undefined && (
+                <span className={css.metaValue} style={{ fontSize: '10px', opacity: 0.5 }}>
+                  Wallet: {balances[toMint].toLocaleString(undefined, { maximumFractionDigits: 6 })}
+                </span>
+              )}
+            </div>
             <div className={css.slotRow}>
               <select className={css.tokenSelect} value={toMint} onChange={(e) => {
                 setToMint(e.target.value);

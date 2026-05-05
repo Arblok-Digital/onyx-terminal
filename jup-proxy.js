@@ -39,7 +39,7 @@ app.get('/api/jup/test', (req, res) => {
  */
 app.get('/api/jup/quote', async (req, res) => {
   try {
-    const { inputMint, outputMint, amount, slippageBps, allowPump } = req.query;
+    const { inputMint, outputMint, amount, slippageBps, isSafeLocked } = req.query;
 
     if (!inputMint || !outputMint || !amount) {
       return res.status(400).json({ error: "Missing required parameters" });
@@ -76,8 +76,8 @@ app.get('/api/jup/quote', async (req, res) => {
 
     let response;
     try {
-      // Attempt 1: High Priority - Cari rute TANPA Pump.fun
-      console.log(`[QUOTE-P1] Mencari rute prioritas (Meteora/Raydium/Orca)...`);
+      // Phase 1: Cari rute prioritas (tanpa Pump.fun)
+      console.log(`[QUOTE-P1] Mencari rute mainstream (Meteora/Raydium)...`);
       response = await axios.get(`${JUP_BASE_URL}/quote`, {
         params: {
           ...commonParams,
@@ -89,16 +89,19 @@ app.get('/api/jup/quote', async (req, res) => {
         }
       });
 
-      if (!response.data || !response.data.routePlan || response.data.routePlan.length === 0) {
-        throw new Error("No priority route");
-      }
-    } catch (e) {
-      // 🔥 Perbaikan: Cek apakah errornya beneran karena rute gak ada, atau cuma slippage
-      const errorData = e.response?.data?.error || "";
-      const isNoRoute = errorData.toLowerCase().includes("no route") || e.message === "No priority route";
+      if (!response.data?.routePlan?.length) throw new Error("No mainstream route");
 
-      if (isNoRoute) {
-        console.log(`[QUOTE-P2] Rute prioritas tidak ada, fallback ke Pump.fun...`);
+    } catch (e) {
+      // Jika rute dikunci ke Safe-Only oleh frontend, jangan coba rute Pump.fun
+      if (isSafeLocked === 'true') {
+        console.log(`[QUOTE-STRICT] Safe route is locked, ignoring fallback.`);
+        const status = e.response?.status || 400;
+        return res.status(status).json(e.response?.data || { error: "Mainstream route unavailable" });
+      }
+
+      // Phase 2: Fallback inklusif (Coba semua DEX, termasuk Pump.fun)
+      try {
+        console.log(`[QUOTE-P2] Fallback: Mencoba rute inklusif (termasuk Pump.fun)...`);
         response = await axios.get(`${JUP_BASE_URL}/quote`, {
           params: commonParams,
           headers: {
@@ -106,11 +109,10 @@ app.get('/api/jup/quote', async (req, res) => {
             'Accept': 'application/json'
           }
         });
-      } else {
-        // Kalau errornya Slippage atau API Error lainnya, jangan fallback, lempar aja biar user tau
-        const status = e.response?.status || 500;
-        console.error(`[QUOTE-P1-FAIL] Error bukan rute:`, errorData);
-        return res.status(status).json(e.response?.data || { error: e.message });
+      } catch (fallbackErr) {
+        const status = fallbackErr.response?.status || 500;
+        console.error(`[QUOTE-FAIL] Total Failure:`, fallbackErr.response?.data || fallbackErr.message);
+        return res.status(status).json(fallbackErr.response?.data || { error: "Gagal menemukan rute swap." });
       }
     }
 

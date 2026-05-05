@@ -14,7 +14,7 @@ export default async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(200).end();
 
   try {
-    const { inputMint, outputMint, amount, slippageBps } = req.query;
+    const { inputMint, outputMint, amount, slippageBps, isSafeLocked } = req.query;
 
     if (!inputMint || !outputMint || !amount) {
       return res.status(400).json({ error: "Missing required parameters" });
@@ -57,11 +57,18 @@ export default async function handler(req, res) {
           'Accept': 'application/json'
         }
       });
+
+      if (!response.data?.routePlan?.length) throw new Error("No mainstream route");
+
     } catch (e) {
-      const errorMsg = e.response?.data?.error || "";
-      // Hanya fallback jika benar-benar tidak ada rute selain pump.fun
-      if (errorMsg.toLowerCase().includes("no route") || !e.response) {
-        console.log("[API-QUOTE] Phase 1 failed, falling back to all DEXes");
+      if (isSafeLocked === 'true') {
+        const status = e.response?.status || 400;
+        return res.status(status).json(e.response?.data || { error: "Mainstream route unavailable" });
+      }
+
+      // Fallback ke semua DEX
+      try {
+        console.log("[API-QUOTE] Falling back to all DEXes (including Pump.fun)");
         response = await axios.get(`${JUP_BASE_URL}/quote`, {
           params: commonParams,
           headers: {
@@ -69,9 +76,9 @@ export default async function handler(req, res) {
             'Accept': 'application/json'
           }
         });
-      } else {
-        // Jika errornya Slippage, dsb. langsung return error original
-        return res.status(e.response?.status || 500).json(e.response?.data);
+      } catch (fallbackErr) {
+        const status = fallbackErr.response?.status || 500;
+        return res.status(status).json(fallbackErr.response?.data || { error: "No routes found." });
       }
     }
 
