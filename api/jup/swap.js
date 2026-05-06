@@ -1,4 +1,6 @@
 import axios from 'axios';
+import { PublicKey } from '@solana/web3.js';
+import { getAssociatedTokenAddress } from '@solana/spl-token';
 
 const JUP_API_KEY = process.env.JUPITER_API_KEY || "";
 const JUP_BASE_URL = "https://api.jup.ag/swap/v1";
@@ -25,12 +27,20 @@ export default async function handler(req, res) {
     }
 
     const { inputMint, outputMint } = quoteResponse;
+
+    // 🔥 SINKRONISASI: Generate user destination ATA agar Jupiter handle pembuatan akun di Vercel
+    const userDestinationATA = await getAssociatedTokenAddress(
+      new PublicKey(outputMint),
+      new PublicKey(userPublicKey)
+    );
+
     const swapParams = {
       quoteResponse,
       userPublicKey,
       wrapAndUnwrapSol,
       dynamicComputeUnitLimit: true,
-      // prioritizationFeeLamports: "auto" // Biarkan Jupiter menangani fee secara default
+      prioritizationFeeLamports: "auto",
+      destinationTokenAccount: userDestinationATA.toBase58()
     };
 
     // Suntik fee account berdasarkan token yang di-swap
