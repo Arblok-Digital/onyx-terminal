@@ -132,7 +132,8 @@ app.post('/api/jup/swap', async (req, res) => {
       userPublicKey,
       wrapAndUnwrapSol,
       dynamicComputeUnitLimit: true,
-      prioritizationFeeLamports: "auto", // Kita aktifkan lagi auto agar koin mecin tidak disalip (frontrun)
+      // BATAS PRIORITAS: Menggunakan angka tetap (0.002 SOL) untuk menghindari biaya "auto" yang tidak terkendali.
+      prioritizationFeeLamports: 2000000, 
       asLegacyTransaction: false, // Gunakan Versioned Transaction untuk kompatibilitas token baru
       destinationTokenAccount: userDestinationATA.toBase58()
     };

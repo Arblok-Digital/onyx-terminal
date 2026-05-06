@@ -39,15 +39,26 @@ export default async function handler(req, res) {
       userPublicKey,
       wrapAndUnwrapSol,
       dynamicComputeUnitLimit: true,
-      prioritizationFeeLamports: "auto",
+      // BATAS PRIORITAS: Menggunakan angka tetap (0.002 SOL) untuk menghindari biaya "auto" yang tidak terkendali.
+      prioritizationFeeLamports: 2000000,
       destinationTokenAccount: userDestinationATA.toBase58()
     };
 
-    // Suntik fee account berdasarkan token yang di-swap
-    if (outputMint === MINTS.WSOL || inputMint === MINTS.WSOL) {
+    // 🔥 SINKRONISASI LOGIKA FEE: Suntik feeAccount secara dinamis
+    if (outputMint === MINTS.WSOL) {
       swapParams.feeAccount = FEE_ACCOUNTS.WSOL;
-    } else if (outputMint === MINTS.USDC || inputMint === MINTS.USDC) {
+      console.log(`[FEE] Injecting wSOL ATA (output): ${FEE_ACCOUNTS.WSOL}`);
+    } else if (outputMint === MINTS.USDC) {
       swapParams.feeAccount = FEE_ACCOUNTS.USDC;
+      console.log(`[FEE] Injecting USDC ATA (output): ${FEE_ACCOUNTS.USDC}`);
+    } else if (inputMint === MINTS.WSOL) {
+      swapParams.feeAccount = FEE_ACCOUNTS.WSOL;
+      console.log(`[FEE] Injecting wSOL ATA (input): ${FEE_ACCOUNTS.WSOL}`);
+    } else if (inputMint === MINTS.USDC) {
+      swapParams.feeAccount = FEE_ACCOUNTS.USDC;
+      console.log(`[FEE] Injecting USDC ATA (input): ${FEE_ACCOUNTS.USDC}`);
+    } else {
+      console.log('[FEE] No target token found in pair. Skipping fee.');
     }
 
     const response = await axios.post(`${JUP_BASE_URL}/swap`, swapParams, {
