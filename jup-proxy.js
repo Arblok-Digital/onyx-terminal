@@ -2,6 +2,8 @@ import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import axios from 'axios';
+import { PublicKey } from '@solana/web3.js';
+import { getAssociatedTokenAddress } from '@solana/spl-token';
 
 const app = express();
 app.use(cors());
@@ -71,50 +73,20 @@ app.get('/api/jup/quote', async (req, res) => {
       ...(isAuto 
         ? { autoSlippage: true, autoSlippageCollisionUsdValue: 1000 } 
         : { slippageBps: manualSlippageBps }),
-      platformFeeBps
+      platformFeeBps,
+      maxAccounts: 64, // Batasi jumlah account agar transaksi tidak terlalu besar
+      restrictIntermediateTokens: false, // Penting: Izinkan token yang belum terverifikasi (mecin)
+      filterSecurityTokens: false // Nonaktifkan filter keamanan tambahan Jupiter
     };
 
-    let response;
-    try {
-      // Phase 1: Cari rute prioritas (tanpa Pump.fun)
-      console.log(`[QUOTE-P1] Mencari rute mainstream (Meteora/Raydium)...`);
-      response = await axios.get(`${JUP_BASE_URL}/quote`, {
-        params: {
-          ...commonParams,
-          excludeDexes: "Pump.fun"
-        },
-        headers: {
-          'x-api-key': JUP_API_KEY,
-          'Accept': 'application/json'
-        }
-      });
-
-      if (!response.data?.routePlan?.length) throw new Error("No mainstream route");
-
-    } catch (e) {
-      // Jika rute dikunci ke Safe-Only oleh frontend, jangan coba rute Pump.fun
-      if (isSafeLocked === 'true') {
-        console.log(`[QUOTE-STRICT] Safe route is locked, ignoring fallback.`);
-        const status = e.response?.status || 400;
-        return res.status(status).json(e.response?.data || { error: "Mainstream route unavailable" });
+    console.log(`[QUOTE] Fetching best route from Jupiter...`);
+    const response = await axios.get(`${JUP_BASE_URL}/quote`, {
+      params: commonParams,
+      headers: {
+        'x-api-key': JUP_API_KEY,
+        'Accept': 'application/json'
       }
-
-      // Phase 2: Fallback inklusif (Coba semua DEX, termasuk Pump.fun)
-      try {
-        console.log(`[QUOTE-P2] Fallback: Mencoba rute inklusif (termasuk Pump.fun)...`);
-        response = await axios.get(`${JUP_BASE_URL}/quote`, {
-          params: commonParams,
-          headers: {
-            'x-api-key': JUP_API_KEY,
-            'Accept': 'application/json'
-          }
-        });
-      } catch (fallbackErr) {
-        const status = fallbackErr.response?.status || 500;
-        console.error(`[QUOTE-FAIL] Total Failure:`, fallbackErr.response?.data || fallbackErr.message);
-        return res.status(status).json(fallbackErr.response?.data || { error: "Gagal menemukan rute swap." });
-      }
-    }
+    });
 
     const quoteData = response.data;
 
@@ -148,12 +120,21 @@ app.post('/api/jup/swap', async (req, res) => {
     }
 
     const { inputMint, outputMint } = quoteResponse;
+
+    // Generate user destination ATA secara manual agar Jupiter otomatis menangani pembuatan akun jika belum ada
+    const userDestinationATA = await getAssociatedTokenAddress(
+      new PublicKey(outputMint),
+      new PublicKey(userPublicKey)
+    );
+
     const swapParams = {
       quoteResponse,
       userPublicKey,
       wrapAndUnwrapSol,
       dynamicComputeUnitLimit: true,
-      prioritizationFeeLamports: "auto"
+      prioritizationFeeLamports: "auto", // Kita aktifkan lagi auto agar koin mecin tidak disalip (frontrun)
+      asLegacyTransaction: false, // Gunakan Versioned Transaction untuk kompatibilitas token baru
+      destinationTokenAccount: userDestinationATA.toBase58()
     };
 
     // 🔥 FIX: Suntik feeAccount secara dinamis (prioritas output, lalu input)

@@ -30,7 +30,7 @@ export default async function handler(req, res) {
       userPublicKey,
       wrapAndUnwrapSol,
       dynamicComputeUnitLimit: true,
-      prioritizationFeeLamports: "auto"
+      // prioritizationFeeLamports: "auto" // Biarkan Jupiter menangani fee secara default
     };
 
     // Suntik fee account berdasarkan token yang di-swap

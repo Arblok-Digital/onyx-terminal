@@ -135,7 +135,7 @@ export default function Swap() {
         // 2. Fetch SPL Balances (Legacy & Token2022)
         try {
           const TOKEN_PROGRAM_ID = new PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
-          const TOKEN_2022_PROGRAM_ID = new PublicKey("TokenzQdBNbLqP5VEhdkTh4GE7qS9E3SSYkw7VPTNV");
+          const TOKEN_2022_PROGRAM_ID = new PublicKey("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb");
 
           const [spl, spl2022] = await Promise.all([
             connection.getParsedTokenAccountsByOwner(publicKey, { programId: TOKEN_PROGRAM_ID }),
@@ -244,7 +244,9 @@ export default function Swap() {
       return prev;
     });
 
-    const slippageBps = Math.floor(Number(slippage) * 100) || 50;
+    const slippageBps = slippage.toLowerCase().trim() === 'auto' 
+      ? 'auto' 
+      : Math.floor(Number(slippage) * 100) || 50;
 
     const params = new URLSearchParams({
       inputMint: fromMint,
@@ -344,7 +346,21 @@ export default function Swap() {
 
       setQuote(null);
     } catch (e) {
-      setSwapError(e.message || "Swap gagal");
+      console.error("Execute Swap Error:", e);
+      let msg = e.message || String(e);
+
+      // Handle Jupiter Slippage Error (0x1771 atau 6001)
+      if (msg.includes("0x1771") || msg.includes("6001")) {
+        msg = "SLIPPAGE ERROR: Harga bergerak terlalu cepat. Naikkan Slippage (misal: 10 atau ketik 'auto') dan coba lagi.";
+      } else if (msg.includes("User rejected")) {
+        msg = "Transaksi dibatalkan di wallet.";
+      } else if (msg.includes("0x177e") || msg.includes("6006")) {
+        msg = "SALDO SOL TIPIS: Sisa SOL di wallet tidak cukup untuk biaya 'Rent' akun token baru.";
+      } else if (msg.includes("too large")) {
+        msg = "Transaksi terlalu kompleks. Coba rute lain.";
+      }
+      
+      setSwapError(msg);
     } finally {
       setSwapping(false);
     }
@@ -482,8 +498,11 @@ export default function Swap() {
                   style={{ cursor: 'pointer', fontSize: '10px', color: 'var(--accent)', opacity: 0.8 }}
                   onClick={() => {
                     const bal = balances[fromMint];
-                    // Jika SOL, sisakan sedikit (0.005) buat fee transaksi agar tidak error
-                    const safeAmt = fromMint === KNOWN_TOKENS.SOL.mint ? Math.max(0, bal - 0.005) : bal;
+                    // 🔥 FIX: Jika SOL, kita WAJIB sisakan sedikit (0.005) buat gas fee.
+                    // Tanpa ini, transaksi 'Max' SOL pasti gagal simulation (error 0x177e).
+                    const safeAmt = fromMint === KNOWN_TOKENS.SOL.mint 
+                      ? Math.max(0, bal - 0.005) 
+                      : bal;
                     setAmount(String(safeAmt));
                   }}
                 >
@@ -537,6 +556,31 @@ export default function Swap() {
           </div>
           {pasteErr && <div className={css.error}>{pasteErr}</div>}
           {quoteError && <div className={css.error}>{quoteError}</div>}
+
+          {/* Slippage Control - Selalu muncul agar user bisa set 'auto' saat quote gagal */}
+          <div className={css.settingsRow}>
+            <span className={css.metaLabel}>Slippage Config</span>
+            <div className={css.slippageContainer}>
+              <div className={css.slippagePresets}>
+                {['0.5', '1.0', 'auto'].map((val) => (
+                  <button 
+                    key={val} 
+                    className={`${css.disconnectBtn} ${slippage === val ? css.activePreset : ""}`}
+                    style={{ padding: '3px 8px', fontSize: '10px', textTransform: 'uppercase' }}
+                    onClick={() => setSlippage(val)}
+                  >
+                    {val === 'auto' ? 'Auto' : `${val}%`}
+                  </button>
+                ))}
+              </div>
+              <input 
+                className={css.slippageInput} 
+                type="text" 
+                value={slippage} 
+                onChange={(e) => setSlippage(e.target.value)} 
+              />
+            </div>
+          </div>
 
           {swapError && <div className={css.error}>{swapError}</div>}
           {swapSuccess && (
@@ -608,14 +652,25 @@ export default function Swap() {
               <span className={css.metaLabel}>Route hops</span>
               <span className={css.metaValue}>{quote.routePlan?.length ?? "—"}</span>
               <span className={css.metaLabel}>Slippage</span>
-              <div className={css.metaValue}>
+              <div className={css.metaValue} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <div className={css.slippagePresets}>
+                  {['0.5', '1.0', 'auto'].map((val) => (
+                    <button 
+                      key={val} 
+                      className={`${css.disconnectBtn} ${slippage === val ? css.activePreset : ""}`}
+                      style={{ padding: '2px 6px', fontSize: '9px', textTransform: 'uppercase' }}
+                      onClick={() => setSlippage(val)}
+                    >
+                      {val === 'auto' ? 'Auto' : `${val}%`}
+                    </button>
+                  ))}
+                </div>
                 <input 
                   className={css.slippageInput} 
                   type="text" 
                   value={slippage} 
                   onChange={(e) => setSlippage(e.target.value)} 
                 />
-                <span style={{ marginLeft: '2px' }}>%</span>
               </div>
             </div>
           )}

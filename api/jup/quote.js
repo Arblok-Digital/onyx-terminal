@@ -39,49 +39,21 @@ export default async function handler(req, res) {
       ...(isAuto 
         ? { autoSlippage: true, autoSlippageCollisionUsdValue: 1000 } 
         : { slippageBps: manualSlippageBps }),
-      platformFeeBps
+      platformFeeBps,
+      maxAccounts: 64, // Tambahkan ini agar rute tidak terlalu kompleks
+      restrictIntermediateTokens: false, // Buka akses ke token mecin baru
+      filterSecurityTokens: false // Jangan batasi koin high-risk
     };
 
-    let response;
-    try {
-      // Prioritas 1: Tanpa Pump.fun
-      console.log("[API-QUOTE] Attempting Phase 1 (Excluded Pump.fun)");
-      response = await axios.get(`${JUP_BASE_URL}/quote`, {
-        params: {
-          ...commonParams,
-          excludeDexes: "Pump.fun",
-          onlyDirectRoutes: false // Biar Jupiter tetep bisa hopping antar DEX mainstream
-        },
-        headers: {
-          'x-api-key': JUP_API_KEY,
-          'Accept': 'application/json'
-        }
-      });
-
-      if (!response.data?.routePlan?.length) throw new Error("No mainstream route");
-
-    } catch (e) {
-      if (isSafeLocked === 'true') {
-        const status = e.response?.status || 400;
-        return res.status(status).json(e.response?.data || { error: "Mainstream route unavailable" });
+    console.log("[API-QUOTE] Requesting best inclusive route...");
+    const response = await axios.get(`${JUP_BASE_URL}/quote`, {
+      params: commonParams,
+      headers: {
+        'x-api-key': JUP_API_KEY,
+        'Accept': 'application/json'
       }
-
-      // Fallback ke semua DEX
-      try {
-        console.log("[API-QUOTE] Falling back to all DEXes (including Pump.fun)");
-        response = await axios.get(`${JUP_BASE_URL}/quote`, {
-          params: commonParams,
-          headers: {
-            'x-api-key': JUP_API_KEY,
-            'Accept': 'application/json'
-          }
-        });
-      } catch (fallbackErr) {
-        const status = fallbackErr.response?.status || 500;
-        return res.status(status).json(fallbackErr.response?.data || { error: "No routes found." });
-      }
-    }
-
+    });
+    
     const quoteData = response.data;
 
     if (quoteData.error) {
