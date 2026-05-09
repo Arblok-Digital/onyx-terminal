@@ -10,7 +10,7 @@ onyx_protocol = "4ERj5qStaTQtvjC8Ae4pbmS4aJ7GNoJA6NUwPgCszNxV"
 
 [provider]
 cluster = "localnet"
-wallet = '~\.config\solana\id.json'
+wallet = 'C:\Users\ARBLOK\.config\solana\id.json'
 
 [scripts]
 test = "cargo test"

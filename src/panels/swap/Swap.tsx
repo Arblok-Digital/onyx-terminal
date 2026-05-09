@@ -84,6 +84,7 @@ export default function Swap() {
   const [refreshTick, setRefreshTick] = useState(0);
   const [isSafeLocked, setIsSafeLocked] = useState(false);
   const [balances, setBalances] = useState<Record<string, number>>({});
+  const [walletMetadata, setWalletMetadata] = useState<Record<string, any>>({});
   const [timeLeft, setTimeLeft] = useState(20);
 
   // Swap execution state
@@ -162,6 +163,37 @@ export default function Swap() {
     fetchAllBalances();
   }, [open, publicKey, refreshTick]);
 
+  // 🔥 FETCH METADATA: Ambil nama & simbol buat koin-koin di wallet yang belum dikenal
+  useEffect(() => {
+    const mintsToFetch = Object.keys(balances).filter(m => !walletMetadata[m] && !KNOWN_LIST.find(kt => kt.mint === m));
+    if (mintsToFetch.length === 0) return;
+
+    // Fetch batch (Pake API Jupiter bulk biar kenceng)
+    const fetchMeta = async () => {
+      try {
+        const res = await fetch(`https://tokens.jup.ag/tokens?mints=${mintsToFetch.join(',')}`);
+        if (res.ok) {
+          const data = await res.json();
+          const newMeta = { ...walletMetadata };
+          // Jupiter balikannya array, kita mapping ke object
+          data.forEach((t: any) => {
+            if (t) {
+              newMeta[t.address] = { symbol: t.symbol, decimals: t.decimals, mint: t.address };
+            }
+          });
+          // Untuk koin yang nggak ada di Jupiter, kasih label UNKN biar nggak fetch ulang terus
+          mintsToFetch.forEach(m => {
+            if (!newMeta[m]) newMeta[m] = { symbol: "UNKN", decimals: 6, mint: m };
+          });
+          setWalletMetadata(newMeta);
+        }
+      } catch (err) {
+        console.warn("Gagal fetch metadata wallet:", err);
+      }
+    };
+    fetchMeta();
+  }, [balances]);
+
   // Resolve token info
   const toResolved = useJupiterTokenInfo(toMint);
   const fromResolved = useJupiterTokenInfo(fromMint);
@@ -179,8 +211,14 @@ export default function Swap() {
     if (fromResolved && (!m[fromResolved.mint] || (m[fromResolved.mint].symbol === "UNKN" && fromResolved.symbol !== "UNKN"))) {
       m[fromResolved.mint] = fromResolved;
     }
+    // 3. Masukkan metadata dari wallet yang baru di-fetch
+    Object.values(walletMetadata).forEach((meta: any) => {
+      if (!m[meta.mint] || m[meta.mint].symbol === "UNKN") {
+        m[meta.mint] = meta;
+      }
+    });
     return m;
-  }, [toResolved, fromResolved]);
+  }, [toResolved, fromResolved, walletMetadata]);
 
   const fromInfo = tokenMap[fromMint];
   const toInfo = tokenMap[toMint];
@@ -506,7 +544,7 @@ export default function Swap() {
                     // 🔥 FIX: Kita WAJIB sisakan 0.01 SOL buat gas fee + ATA Rent.
                     // Ini setara ~$2, cukup buat transaksi koin mecin paling newborn sekalipun.
                     const safeAmt = fromMint === KNOWN_TOKENS.SOL.mint 
-                      ? Math.max(0, bal - 0.01) 
+                      ? Math.max(0, bal - 0.005) 
                       : bal;
                     setAmount(String(safeAmt));
                   }}
