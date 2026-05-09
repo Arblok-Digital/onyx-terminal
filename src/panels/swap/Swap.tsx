@@ -80,6 +80,7 @@ export default function Swap() {
   const [quote, setQuote] = useState(null);
   const [quoteLoading, setQuoteLoading] = useState(false);
   const [quoteError, setQuoteError] = useState("");
+  const [quoteWarning, setQuoteWarning] = useState("");
   const [refreshTick, setRefreshTick] = useState(0);
   const [isSafeLocked, setIsSafeLocked] = useState(false);
   const [balances, setBalances] = useState<Record<string, number>>({});
@@ -236,6 +237,7 @@ export default function Swap() {
 
     setQuoteLoading(true);
     setQuoteError("");
+    setQuoteWarning("");
     
     // Anti-Flicker: Jangan hapus quote lama saat refresh harga agar UI tidak "mental"
     setQuote(prev => {
@@ -276,18 +278,21 @@ export default function Swap() {
       .then((data) => {
         if (!cancelled) {
           setQuote(data);
-          // Cek rute: Jika tidak lewat Pump.fun, kunci jalurnya!
+          // Cek rute: Jika lewat Pump.fun, kasih warning ke user!
           const hasPump = data.routePlan?.some((step: any) => 
             step.swapInfo.label.toLowerCase().includes("pump")
           );
+          if (hasPump) {
+            setQuoteWarning("PUMP.FUN ROUTE: Gunakan Slippage tinggi (10%+) agar tidak gagal.");
+          }
           if (!hasPump && data.routePlan?.length > 0) setIsSafeLocked(true);
         }
       })
       .catch((err) => {
         console.error("Fetch error details:", err);
         if (!cancelled) {
-          setQuote(null); // Bersihkan jalur jika quote gagal
-          setQuoteError(err.message === "Failed to fetch" ? "Serverless Proxy tidak merespon. Pastikan Environment Variables sudah di-set di Vercel." : err.message);
+          setQuote(null); 
+          setQuoteError(err.message === "Failed to fetch" ? "Serverless Proxy tidak merespon." : err.message);
         }
       })
       .finally(() => {
@@ -498,10 +503,10 @@ export default function Swap() {
                   style={{ cursor: 'pointer', fontSize: '10px', color: 'var(--accent)', opacity: 0.8 }}
                   onClick={() => {
                     const bal = balances[fromMint];
-                    // 🔥 FIX: Jika SOL, kita WAJIB sisakan sedikit (0.005) buat gas fee.
-                    // Tanpa ini, transaksi 'Max' SOL pasti gagal simulation (error 0x177e).
+                    // 🔥 FIX: Kita WAJIB sisakan 0.01 SOL buat gas fee + ATA Rent.
+                    // Ini setara ~$2, cukup buat transaksi koin mecin paling newborn sekalipun.
                     const safeAmt = fromMint === KNOWN_TOKENS.SOL.mint 
-                      ? Math.max(0, bal - 0.005) 
+                      ? Math.max(0, bal - 0.01) 
                       : bal;
                     setAmount(String(safeAmt));
                   }}
@@ -556,6 +561,7 @@ export default function Swap() {
           </div>
           {pasteErr && <div className={css.error}>{pasteErr}</div>}
           {quoteError && <div className={css.error}>{quoteError}</div>}
+          {quoteWarning && <div className={css.warning} style={{ color: '#f39c12', backgroundColor: 'rgba(243, 156, 18, 0.1)', padding: '8px', borderRadius: '4px', fontSize: '11px', marginBottom: '8px', border: '1px solid rgba(243, 156, 18, 0.3)' }}>⚠️ {quoteWarning}</div>}
 
           {/* Slippage Control - Selalu muncul agar user bisa set 'auto' saat quote gagal */}
           <div className={css.settingsRow}>

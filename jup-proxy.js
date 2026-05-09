@@ -43,28 +43,21 @@ app.get('/api/jup/quote', async (req, res) => {
   try {
     const { inputMint, outputMint, amount, slippageBps, isSafeLocked } = req.query;
 
-    if (!inputMint || !outputMint || !amount) {
-      return res.status(400).json({ error: "Missing required parameters" });
-    }
-
-    // Fee 50bps jika input ATAU output adalah wSOL/USDC (Logika 2 arah)
-    const isInputTarget = (inputMint === MINTS.WSOL || inputMint === MINTS.USDC);
+    // LOGIC FIX: Kita cuma narik fee kalau OUTPUT token-nya adalah WSOL atau USDC.
+    // Ini karena Jupiter narik fee dari output token, dan kita cuma punya feeAccount buat koin gede.
     const isOutputTarget = (outputMint === MINTS.WSOL || outputMint === MINTS.USDC);
-    const platformFeeBps = (isInputTarget || isOutputTarget) ? 50 : 0;
+    const platformFeeBps = isOutputTarget ? 50 : 0;
 
-    console.log(`Quote Request: In=${inputMint}, Out=${outputMint}`);
+    console.log(`[QUOTE] In: ${inputMint.slice(0, 4)}... Out: ${outputMint.slice(0, 4)}... Fee: ${platformFeeBps}bps`);
 
-    // 🔥 FIX: Handle Auto Slippage lebih robust (trim & lowercase)
+    // FIX: Handle Auto Slippage lebih robust
     const isAuto = typeof slippageBps === 'string' && slippageBps.toLowerCase().trim() === 'auto';
     
-    // 🔥 FIX: Pastikan slippageBps selalu integer jika manual
-    let manualSlippageBps = 50; // fallback default
+    let manualSlippageBps = 50; 
     if (!isAuto && slippageBps) {
       const parsed = parseInt(String(slippageBps), 10);
       if (!isNaN(parsed)) manualSlippageBps = parsed;
     }
-
-    console.log(`[QUOTE] In: ${inputMint.slice(0,4)}... Out: ${outputMint.slice(0,4)}... Amt: ${amount}`);
 
     const commonParams = {
       inputMint,
@@ -74,12 +67,11 @@ app.get('/api/jup/quote', async (req, res) => {
         ? { autoSlippage: true, autoSlippageCollisionUsdValue: 1000 } 
         : { slippageBps: manualSlippageBps }),
       platformFeeBps,
-      maxAccounts: 64, // Batasi jumlah account agar transaksi tidak terlalu besar
-      restrictIntermediateTokens: false, // Penting: Izinkan token yang belum terverifikasi (mecin)
-      filterSecurityTokens: false // Nonaktifkan filter keamanan tambahan Jupiter
+      maxAccounts: 64, 
+      restrictIntermediateTokens: false, 
+      filterSecurityTokens: false 
     };
 
-    console.log(`[QUOTE] Fetching best route from Jupiter...`);
     const response = await axios.get(`${JUP_BASE_URL}/quote`, {
       params: commonParams,
       headers: {
@@ -90,7 +82,6 @@ app.get('/api/jup/quote', async (req, res) => {
 
     const quoteData = response.data;
 
-    // 1. Pengecekan Error Jupiter (Case Insensitive)
     if (quoteData.error) {
       console.error("[JUP_ERR]", quoteData.error);
       return res.status(400).json({ error: quoteData.error });
@@ -119,40 +110,27 @@ app.post('/api/jup/swap', async (req, res) => {
       return res.status(400).json({ error: "Missing swap parameters" });
     }
 
-    const { inputMint, outputMint } = quoteResponse;
-
-    // Generate user destination ATA secara manual agar Jupiter otomatis menangani pembuatan akun jika belum ada
-    const userDestinationATA = await getAssociatedTokenAddress(
-      new PublicKey(outputMint),
-      new PublicKey(userPublicKey)
-    );
+    const { outputMint } = quoteResponse;
 
     const swapParams = {
       quoteResponse,
       userPublicKey,
       wrapAndUnwrapSol,
       dynamicComputeUnitLimit: true,
-      // BATAS PRIORITAS: Menggunakan angka tetap (0.002 SOL) untuk menghindari biaya "auto" yang tidak terkendali.
       prioritizationFeeLamports: 2000000, 
-      asLegacyTransaction: false, // Gunakan Versioned Transaction untuk kompatibilitas token baru
-      destinationTokenAccount: userDestinationATA.toBase58()
+      asLegacyTransaction: false, 
+      // HAPUS destinationTokenAccount: Jupiter bakal otomatis bikin ATA yang paling bener (Token vs Token2022)
     };
 
-    // 🔥 FIX: Suntik feeAccount secara dinamis (prioritas output, lalu input)
+    // SUNTIK feeAccount cuma kalau outputMint-nya terdaftar
     if (outputMint === MINTS.WSOL) {
       swapParams.feeAccount = FEE_ACCOUNTS.WSOL;
-      console.log(`[FEE] Injecting wSOL ATA (output): ${FEE_ACCOUNTS.WSOL}`);
+      console.log(`[FEE] Injecting wSOL ATA: ${FEE_ACCOUNTS.WSOL}`);
     } else if (outputMint === MINTS.USDC) {
       swapParams.feeAccount = FEE_ACCOUNTS.USDC;
-      console.log(`[FEE] Injecting USDC ATA (output): ${FEE_ACCOUNTS.USDC}`);
-    } else if (inputMint === MINTS.WSOL) {
-      swapParams.feeAccount = FEE_ACCOUNTS.WSOL;
-      console.log(`[FEE] Injecting wSOL ATA (input): ${FEE_ACCOUNTS.WSOL}`);
-    } else if (inputMint === MINTS.USDC) {
-      swapParams.feeAccount = FEE_ACCOUNTS.USDC;
-      console.log(`[FEE] Injecting USDC ATA (input): ${FEE_ACCOUNTS.USDC}`);
+      console.log(`[FEE] Injecting USDC ATA: ${FEE_ACCOUNTS.USDC}`);
     } else {
-      console.log('[FEE] No target token found in pair. Skipping fee.');
+      console.log('[FEE] No fee account for this output. Skipping platform fee to ensure swap success.');
     }
 
     const response = await axios.post(`${JUP_BASE_URL}/swap`, swapParams, {
@@ -166,7 +144,7 @@ app.post('/api/jup/swap', async (req, res) => {
   } catch (error) {
     const status = error.response?.status || 500;
     console.error(`Swap Proxy Error [${status}]:`, error.response?.data || error.message);
-    res.status(status).json(error.response?.data || { error: "Failed to build swap transaction" });
+    res.status(status).json(error.response?.data || { error: "Gagal membuat transaksi swap. Pastikan saldo cukup dan slippage sesuai." });
   }
 });
 

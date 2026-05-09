@@ -1,0 +1,18 @@
+[toolchain]
+package_manager = "yarn"
+
+[features]
+resolution = true
+skip-lint = false
+
+[programs.localnet]
+onyx_protocol = "4ERj5qStaTQtvjC8Ae4pbmS4aJ7GNoJA6NUwPgCszNxV"
+
+[provider]
+cluster = "localnet"
+wallet = '~\.config\solana\id.json'
+
+[scripts]
+test = "cargo test"
+
+[hooks]
