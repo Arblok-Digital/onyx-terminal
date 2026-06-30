@@ -44,15 +44,15 @@ function formatOut(rawStr, decimals) {
   try {
     const n = Number(rawStr) / Math.pow(10, decimals);
     if (!Number.isFinite(n)) return "—";
-    
+
     // Logic cerdas: Kalau angka > 1000, desimal cukup 2 aja biar nggak berantakan.
     // Kalau angka kecil (misal 0.0001), tampilkan desimal lebih banyak biar presisi.
     const maxDec = n >= 1000 ? 2 : (n >= 1 ? 4 : Math.min(decimals, 8));
 
-    return n.toLocaleString("id-ID", { 
+    return n.toLocaleString("id-ID", {
       minimumFractionDigits: 0,
       maximumFractionDigits: maxDec,
-      useGrouping: true 
+      useGrouping: true
     });
   } catch {
     return "—";
@@ -93,13 +93,13 @@ export default function Swap() {
   const [swapSuccess, setSwapSuccess] = useState("");
 
   // Solana Wallet Adapter Hook
-  const { 
-    publicKey, 
-    wallet, 
-    disconnect, 
-    select, 
-    wallets, 
-    signTransaction 
+  const {
+    publicKey,
+    wallet,
+    disconnect,
+    select,
+    wallets,
+    signTransaction
   } = useWallet();
 
   const [showMenu, setShowMenu] = useState(false);
@@ -233,7 +233,7 @@ export default function Swap() {
   // Auto-refresh timer: Hitung mundur & Update quote setiap 20 detik
   useEffect(() => {
     if (!open || swapping) return;
-    
+
     const id = setInterval(() => {
       setTimeLeft((prev) => {
         if (prev <= 1) {
@@ -253,15 +253,23 @@ export default function Swap() {
   }, [fromMint, toMint, amountRaw, slippage]);
 
   // Prefill TO token ketika modal dibuka dan selected token adalah Solana
+  // Fix: Jika selected token sama dengan FROM token, flip agar FROM jadi USDC
   useEffect(() => {
     if (!open) return;
     setPasteErr("");
     setPasteCa("");
     if (selected && selected.chainId === "solana" && selected.address) {
-      setToMint(selected.address); // Tidak perlu set allowPump lagi
+      const selectedMint = selected.address;
+      // Jika selected token sama dengan fromMint saat ini, flip: from=USDC, to=selected
+      if (selectedMint === fromMint) {
+        setFromMint(KNOWN_TOKENS.USDC.mint);
+        setToMint(selectedMint);
+      } else {
+        setToMint(selectedMint);
+      }
     }
     setIsSafeLocked(false);
-  }, [open, selected]);
+  }, [open, selected, fromMint]);
 
   // Fetch quote via proxy
   useEffect(() => {
@@ -276,7 +284,7 @@ export default function Swap() {
     setQuoteLoading(true);
     setQuoteError("");
     setQuoteWarning("");
-    
+
     // Anti-Flicker: Jangan hapus quote lama saat refresh harga agar UI tidak "mental"
     setQuote(prev => {
       if (!prev) return null;
@@ -284,8 +292,8 @@ export default function Swap() {
       return prev;
     });
 
-    const slippageBps = slippage.toLowerCase().trim() === 'auto' 
-      ? 'auto' 
+    const slippageBps = slippage.toLowerCase().trim() === 'auto'
+      ? 'auto'
       : Math.floor(Number(slippage) * 100) || 50;
 
     const params = new URLSearchParams({
@@ -317,7 +325,7 @@ export default function Swap() {
         if (!cancelled) {
           setQuote(data);
           // Cek rute: Jika lewat Pump.fun, kasih warning ke user!
-          const hasPump = data.routePlan?.some((step: any) => 
+          const hasPump = data.routePlan?.some((step: any) =>
             step.swapInfo.label.toLowerCase().includes("pump")
           );
           if (hasPump) {
@@ -329,7 +337,7 @@ export default function Swap() {
       .catch((err) => {
         console.error("Fetch error details:", err);
         if (!cancelled) {
-          setQuote(null); 
+          setQuote(null);
           setQuoteError(err.message === "Failed to fetch" ? "Serverless Proxy tidak merespon." : err.message);
         }
       })
@@ -343,7 +351,7 @@ export default function Swap() {
   // Eksekusi swap
   const executeSwap = async () => {
     if (!quote || !publicKey || !signTransaction) return;
-    
+
     setSwapping(true);
     setSwapError("");
     setSwapSuccess("");
@@ -368,10 +376,10 @@ export default function Swap() {
 
       // Deserialize base64 ke VersionedTransaction agar wallet bisa mengenali datanya
       const transaction = VersionedTransaction.deserialize(Buffer.from(swapTransaction, "base64"));
-      
+
       // Sign transaksi
       const signed = await signTransaction(transaction);
-      
+
       // Kirim via RPC (Gunakan Helius dari config)
       const connection = new Connection(CONFIG.HELIUS_RPC(CONFIG.HELIUS_API_KEY));
       const signature = await connection.sendRawTransaction(signed.serialize(), {
@@ -379,7 +387,7 @@ export default function Swap() {
       });
 
       setSwapSuccess(signature);
-      
+
       // Analytics: Track successful swap to Supabase
       trackSwap(
         fromInfo?.symbol || fromMint,
@@ -402,7 +410,7 @@ export default function Swap() {
       } else if (msg.includes("too large")) {
         msg = "Transaksi terlalu kompleks. Coba rute lain.";
       }
-      
+
       setSwapError(msg);
     } finally {
       setSwapping(false);
@@ -452,12 +460,12 @@ export default function Swap() {
     const walletOpts = [];
     Object.entries(balances).forEach(([mint, amount]) => {
       if (amount <= 0 || knownMints.has(mint)) return;
-      
+
       const info = tokenMap[mint];
-      const label = info && info.symbol !== "UNKN" 
+      const label = info && info.symbol !== "UNKN"
         ? `${info.symbol} (${amount.toLocaleString()})`
         : `${shortMint(mint)} (${amount.toLocaleString()})`;
-        
+
       walletOpts.push(<option key={mint} value={mint}>{label}</option>);
     });
 
@@ -513,10 +521,10 @@ export default function Swap() {
             ) : showMenu ? (
               <div className={css.walletInfo} style={{ gap: '4px', flexWrap: 'wrap' }}>
                 {wallets.map(w => (
-                  <button 
-                    key={w.adapter.name} 
-                    onClick={() => connectTo(w)} 
-                    className={css.disconnectBtn} 
+                  <button
+                    key={w.adapter.name}
+                    onClick={() => connectTo(w)}
+                    className={css.disconnectBtn}
                     style={{ borderColor: 'var(--accent)', color: 'var(--accent)' }}
                   >
                     {w.adapter.name}
@@ -536,15 +544,15 @@ export default function Swap() {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
               <span className={css.slotLabel}>From {getTokenLabel(fromInfo)}</span>
               {publicKey && balances[fromMint] !== undefined && (
-                <span 
-                  className={css.metaValue} 
+                <span
+                  className={css.metaValue}
                   style={{ cursor: 'pointer', fontSize: '10px', color: 'var(--accent)', opacity: 0.8 }}
                   onClick={() => {
                     const bal = balances[fromMint];
                     // 🔥 FIX: Kita WAJIB sisakan 0.01 SOL buat gas fee + ATA Rent.
                     // Ini setara ~$2, cukup buat transaksi koin mecin paling newborn sekalipun.
-                    const safeAmt = fromMint === KNOWN_TOKENS.SOL.mint 
-                      ? Math.max(0, bal - 0.005) 
+                    const safeAmt = fromMint === KNOWN_TOKENS.SOL.mint
+                      ? Math.max(0, bal - 0.005)
                       : bal;
                     setAmount(String(safeAmt));
                   }}
@@ -607,8 +615,8 @@ export default function Swap() {
             <div className={css.slippageContainer}>
               <div className={css.slippagePresets}>
                 {['0.5', '1.0', 'auto'].map((val) => (
-                  <button 
-                    key={val} 
+                  <button
+                    key={val}
                     className={`${css.disconnectBtn} ${slippage === val ? css.activePreset : ""}`}
                     style={{ padding: '3px 8px', fontSize: '10px', textTransform: 'uppercase' }}
                     onClick={() => setSlippage(val)}
@@ -617,11 +625,11 @@ export default function Swap() {
                   </button>
                 ))}
               </div>
-              <input 
-                className={css.slippageInput} 
-                type="text" 
-                value={slippage} 
-                onChange={(e) => setSlippage(e.target.value)} 
+              <input
+                className={css.slippageInput}
+                type="text"
+                value={slippage}
+                onChange={(e) => setSlippage(e.target.value)}
               />
             </div>
           </div>
@@ -630,9 +638,9 @@ export default function Swap() {
           {swapSuccess && (
             <div className={css.success}>
               <div>SWAP BERHASIL!</div>
-              <a 
-                href={`https://solscan.io/tx/${swapSuccess}`} 
-                target="_blank" 
+              <a
+                href={`https://solscan.io/tx/${swapSuccess}`}
+                target="_blank"
                 rel="noreferrer"
                 className={css.successLink}
               >
@@ -648,9 +656,9 @@ export default function Swap() {
               <span className={css.metaValue}>
                 {quote && toInfo && fromInfo
                   ? `1 ${fromInfo.symbol === "UNKN" ? shortMint(fromInfo.mint) : fromInfo.symbol} ≈ ${formatOut(
-                      String(Math.round((Number(quote.outAmount) / Math.max(1, Number(quote.inAmount))) * Math.pow(10, fromInfo.decimals))),
-                      toInfo.decimals,
-                    )} ${toInfo.symbol === "UNKN" ? shortMint(toInfo.mint) : toInfo.symbol}`
+                    String(Math.round((Number(quote.outAmount) / Math.max(1, Number(quote.inAmount))) * Math.pow(10, fromInfo.decimals))),
+                    toInfo.decimals,
+                  )} ${toInfo.symbol === "UNKN" ? shortMint(toInfo.mint) : toInfo.symbol}`
                   : "—"}
               </span>
 
@@ -658,7 +666,7 @@ export default function Swap() {
               {(() => {
                 const isToKnown = KNOWN_LIST.some(t => t.mint === toMint);
                 // Cek secara real-time apakah Jupiter merutekan transaksi ini via Pump.fun AMM
-                const hasPumpRoute = quote?.routePlan?.some(step => 
+                const hasPumpRoute = quote?.routePlan?.some(step =>
                   step.swapInfo.label.toLowerCase().includes("pump")
                 );
 
@@ -688,8 +696,8 @@ export default function Swap() {
               <span className={css.metaLabel}>Price impact</span>
               <span className={
                 impactPct == null ? css.metaValue :
-                impactPct >= 5 ? `${css.metaValue} ${css.bad}` :
-                impactPct >= 1 ? `${css.metaValue} ${css.warn}` : css.metaValue
+                  impactPct >= 5 ? `${css.metaValue} ${css.bad}` :
+                    impactPct >= 1 ? `${css.metaValue} ${css.warn}` : css.metaValue
               }>
                 {impactPct == null ? "—" : impactPct.toFixed(3) + "%"}
               </span>
@@ -699,8 +707,8 @@ export default function Swap() {
               <div className={css.metaValue} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                 <div className={css.slippagePresets}>
                   {['0.5', '1.0', 'auto'].map((val) => (
-                    <button 
-                      key={val} 
+                    <button
+                      key={val}
                       className={`${css.disconnectBtn} ${slippage === val ? css.activePreset : ""}`}
                       style={{ padding: '2px 6px', fontSize: '9px', textTransform: 'uppercase' }}
                       onClick={() => setSlippage(val)}
@@ -709,11 +717,11 @@ export default function Swap() {
                     </button>
                   ))}
                 </div>
-                <input 
-                  className={css.slippageInput} 
-                  type="text" 
-                  value={slippage} 
-                  onChange={(e) => setSlippage(e.target.value)} 
+                <input
+                  className={css.slippageInput}
+                  type="text"
+                  value={slippage}
+                  onChange={(e) => setSlippage(e.target.value)}
                 />
               </div>
             </div>

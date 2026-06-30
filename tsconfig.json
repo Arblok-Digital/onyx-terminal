@@ -1,6 +1,11 @@
 {
-  "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist"],
+  "include": [
+    "src/**/*"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist"
+  ],
   "compilerOptions": {
     "isolatedModules": true,
     "module": "ESNext",
@@ -17,7 +22,21 @@
     ],
     "resolveJsonModule": true,
     "allowImportingTsExtensions": true,
-    "types": ["node", "vite/client"],
-    "paths": { "@/*": ["./src/*"] }
+    "types": [
+      "node",
+      "vite/client",
+      "vitest/globals"
+    ],
+    "paths": {
+      "@/*": [
+        "./src/*"
+      ],
+      "@amd_integration": [
+        "./amd_integration/index.ts"
+      ],
+      "@amd_integration/*": [
+        "./amd_integration/*"
+      ]
+    }
   }
 }

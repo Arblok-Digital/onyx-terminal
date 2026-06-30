@@ -77,11 +77,13 @@ export default defineConfig({
   ],
   define: {
     global: "globalThis",
+    "process.env": "{}",
   },
   resolve: {
     alias: {
       "@": path.resolve(import.meta.dirname, "src"),
       "@assets": path.resolve(import.meta.dirname, "attached_assets"),
+      "@amd_integration": path.resolve(import.meta.dirname, "amd_integration"),
     },
     dedupe: ["react", "react-dom"],
   },
@@ -90,7 +92,7 @@ export default defineConfig({
     outDir: "dist"
   },
   optimizeDeps: {
-    include: ['react', 'react-dom']
+    include: ['react', 'react-dom', 'bn.js', 'buffer']
   },
   server: {
     port: DEFAULT_PORT,

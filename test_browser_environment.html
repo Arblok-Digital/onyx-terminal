@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Onyx AI Browser Test</title>
+    <script type="module">
+        // Import the analyzeToken function from the AMD integration module
+        import { analyzeToken } from './amd_integration/index.js';
+
+        async function testBrowserAICall() {
+            console.log('🧪 Testing Onyx AI in browser environment...');
+
+            try {
+                console.log('🔍 Environment variables available:');
+                console.log('VITE_AI_GATEWAY_URL:', import.meta.env.VITE_AI_GATEWAY_URL);
+                console.log('VITE_AI_GATEWAY_KEY:', import.meta.env.VITE_AI_GATEWAY_KEY);
+
+                // Test with a mock token address
+                const tokenAddress = "So11111111111111111111111111111111111111112";
+                console.log(`🔍 Testing analyzeToken with address: ${tokenAddress}`);
+
+                const result = await analyzeToken(tokenAddress);
+
+                console.log('✅ analyzeToken completed successfully');
+                console.log('📊 Result type:', typeof result);
+                console.log('📋 Result keys:', Object.keys(result));
+
+                if (result.executiveSummary) {
+                    console.log('📝 Executive Summary:', result.executiveSummary.substring(0, 100) + '...');
+                }
+
+                console.log('🎉 Test completed successfully!');
+
+            } catch (error) {
+                console.error('❌ Test failed:', error);
+                console.error('🔍 Error details:', error.message);
+                console.error('📚 Error stack:', error.stack);
+            }
+        }
+
+        // Run the test when the page loads
+        window.addEventListener('DOMContentLoaded', testBrowserAICall);
+    </script>
+</head>
+
+<body>
+    <h1>Onyx AI Browser Test</h1>
+    <p>Check the browser console (F12) for test results.</p>
+    <p>If you see "✅ Test completed successfully", the Onyx AI integration is working correctly.</p>
+</body>
+
+</html>

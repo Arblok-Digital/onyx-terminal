@@ -20,6 +20,7 @@ import Info from "@/panels/info/Info";
 import Swap from "@/panels/swap/Swap"; // Pastikan S besar merujuk ke Swap.tsx
 import Discover from "@/panels/discover/Discover";
 import FlowMonitor from "@/panels/flow-monitor/FlowMonitor";
+import FloatingChat from "@/components/chat/FloatingChat";
 
 import { useLayout } from "@/hooks/useLayout";
 import { useLayoutStore } from "@/core/store/layout.store";
@@ -128,7 +129,7 @@ export default function Terminal() {
         if (snap?.pairAddress) {
           setActiveToken({
             address: e.address,
-            chain: e.chain,
+            chainId: e.chain as never,
             symbol: snap.symbol,
           });
           break;
@@ -147,7 +148,7 @@ export default function Terminal() {
     return (
       <div className={styles.root} style={{ display: 'flex', flexDirection: 'column' }}>
         <Ticker />
-        
+
         {/* Mobile Content Area */}
         <div style={{ flex: 1, overflowY: 'auto', padding: '10px', paddingBottom: '100px' }}>
           {mobileTab === 'market' && (
@@ -231,28 +232,28 @@ export default function Terminal() {
           zIndex: 2000,
           paddingBottom: 'env(safe-area-inset-bottom)', // Support untuk notch iPhone
         }}>
-          <button 
+          <button
             onClick={() => setMobileTab('market')}
             style={{ background: 'none', border: 'none', color: mobileTab === 'market' ? '#3b82f6' : '#6b7280', display: 'flex', flexDirection: 'column', alignItems: 'center', fontSize: '10px' }}
           >
             <Globe size={20} />
             <span>MARKET</span>
           </button>
-          <button 
+          <button
             onClick={() => setMobileTab('trade')}
-            style={{ 
-              background: mobileTab === 'trade' ? '#3b82f6' : '#1f2937', 
-              border: 'none', 
-              color: mobileTab === 'trade' ? '#fff' : '#9ca3af', 
-              width: '50px', height: '50px', borderRadius: '50%', marginTop: '-30px', 
+            style={{
+              background: mobileTab === 'trade' ? '#3b82f6' : '#1f2937',
+              border: 'none',
+              color: mobileTab === 'trade' ? '#fff' : '#9ca3af',
+              width: '50px', height: '50px', borderRadius: '50%', marginTop: '-30px',
               boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
-              display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', fontSize: '9px' 
+              display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', fontSize: '9px'
             }}
           >
             <Repeat size={20} />
             <span>TRADE</span>
           </button>
-          <button 
+          <button
             onClick={() => setMobileTab('flow')}
             style={{ background: 'none', border: 'none', color: mobileTab === 'flow' ? '#3b82f6' : '#6b7280', display: 'flex', flexDirection: 'column', alignItems: 'center', fontSize: '10px' }}
           >
@@ -260,6 +261,9 @@ export default function Terminal() {
             <span>FLOW</span>
           </button>
         </div>
+
+        {/* Onyx AI Assistant — global floating chat */}
+        <FloatingChat />
       </div>
     );
   }
@@ -352,6 +356,9 @@ export default function Terminal() {
       </div>
 
       <StatusBar />
+
+      {/* Onyx AI Assistant — global floating chat */}
+      <FloatingChat />
     </div>
   );
 }

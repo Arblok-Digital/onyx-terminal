@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Onyx Terminal - AI Chat Test</title>
+    <script type="module">
+        // Import the necessary modules
+        import { AgentOrchestrator } from './amd_integration/agentOrchestrator.js';
+        import { AgentRouter } from './amd_integration/core/agentRouter.js';
+        import { AMDResearchManager } from './amd_integration/services/amdAIService.js';
+
+        // Global variables
+        let agentOrchestrator;
+        let agentRouter;
+        let researchManager;
+
+        // Test environment function
+        async function testEnvironment() {
+            try {
+                console.log('🔍 Testing environment...');
+
+                // Test environment variables
+                console.log('📋 Environment variables:');
+                console.log('VITE_AI_GATEWAY_URL:', import.meta.env.VITE_AI_GATEWAY_URL);
+                console.log('VITE_AI_GATEWAY_KEY:', import.meta.env.VITE_AI_GATEWAY_KEY ? '*****' : 'Not set');
+                console.log('VITE_OPENROUTER_API_KEY:', import.meta.env.VITE_OPENROUTER_API_KEY ? '*****' : 'Not set');
+                console.log('VITE_JUP_PROXY_URL:', import.meta.env.VITE_JUP_PROXY_URL);
+
+                // Test if we can access the environment
+                if (typeof import.meta.env === 'undefined') {
+                    throw new Error('import.meta.env is not available');
+                }
+
+                document.getElementById('environmentResult').textContent = '✅ Environment accessible';
+                console.log('✅ Environment test passed');
+
+                return true;
+            } catch (error) {
+                console.error('❌ Environment test failed:', error);
+                document.getElementById('environmentResult').textContent = `❌ Environment test failed: ${error.message}`;
+                return false;
+            }
+        }
+
+        // Test RPC service function
+        async function testRPCService() {
+            try {
+                console.log('🔍 Testing RPC service...');
+
+                // Import RPC service
+                const { MultiRPCService } = await import('./amd_integration/services/rpcService.js');
+                const rpcService = new MultiRPCService();
+
+                console.log('📋 RPC Service created:', rpcService);
+
+                // Test RPC connection
+                const testResult = await rpcService.testConnection();
+                console.log('📋 RPC test result:', testResult);
+
+                if (testResult.success) {
+                    document.getElementById('rpcResult').textContent = '✅ RPC service working';
+                    console.log('✅ RPC service test passed');
+                    return true;
+                } else {
+                    throw new Error(testResult.error || 'RPC connection failed');
+                }
+            } catch (error) {
+                console.error('❌ RPC service test failed:', error);
+                document.getElementById('rpcResult').textContent = `❌ RPC service test failed: ${error.message}`;
+                return false;
+            }
+        }
+
+        // Test Onchain Agent function
+        async function testOnchainAgent() {
+            try {
+                console.log('🔍 Testing Onchain Agent...');
+
+                const { OnchainAgent } = await import('./amd_integration/agents/onchainAgent.js');
+                const onchainAgent = new OnchainAgent();
+
+                console.log('📋 Onchain Agent created:', onchainAgent);
+
+                // Test with a known token address
+                const tokenAddress = document.getElementById('tokenAddress').value || 'So11111111111111111111111111111111111111112';
+                console.log(`📋 Testing with token: ${tokenAddress}`);
+
+                const analysis = await onchainAgent.analyzeToken(tokenAddress);
+                console.log('📋 Onchain analysis result:', analysis);
+
+                document.getElementById('onchainResult').textContent = '✅ Onchain agent working';
+                console.log('✅ Onchain agent test passed');
+                return true;
+            } catch (error) {
+                console.error('❌ Onchain agent test failed:', error);
+                document.getElementById('onchainResult').textContent = `❌ Onchain agent test failed: ${error.message}`;
+                return false;
+            }
+        }
+
+        // Test Market Agent function
+        async function testMarketAgent() {
+            try {
+                console.log('🔍 Testing Market Agent...');
+
+                const { MarketAgent } = await import('./amd_integration/agents/marketAgent.js');
+                const marketAgent = new MarketAgent();
+
+                console.log('📋 Market Agent created:', marketAgent);
+
+                // Test with a known token address
+                const tokenAddress = document.getElementById('tokenAddress').value || 'So11111111111111111111111111111111111111112';
+                console.log(`📋 Testing with token: ${tokenAddress}`);
+
+                const analysis = await marketAgent.analyzeToken(tokenAddress);
+                console.log('📋 Market analysis result:', analysis);
+
+                document.getElementById('marketResult').textContent = '✅ Market agent working';
+                console.log('✅ Market agent test passed');
+                return true;
+            } catch (error) {
+                console.error('❌ Market agent test failed:', error);
+                document.getElementById('marketResult').textContent = `❌ Market agent test failed: ${error.message}`;
+                return false;
+            }
+        }
+
+        // Test AI Chat function
+        async function testAIChat() {
+            try {
+                console.log('🔍 Testing AI Chat...');
+
+                // Initialize the agent orchestrator
+                agentRouter = new AgentRouter();
+                researchManager = new AMDResearchManager();
+                agentOrchestrator = new AgentOrchestrator();
+
+                console.log('📋 Agent Orchestrator created:', agentOrchestrator);
+
+                // Test the AI gateway connection
+                const testMessage = "Hello, this is a test message from Onyx Terminal";
+                console.log(`📋 Testing with message: "${testMessage}"`);
+
+                // Test the agent router
+                const response = await agentRouter.routeRequest({
+                    message: testMessage,
+                    context: {},
+                    model: 'arblok-combo'
+                });
+
+                console.log('📋 AI response:', response);
+
+                if (response && response.response) {
+                    document.getElementById('aiResult').textContent = '✅ AI chat working';
+                    document.getElementById('aiResponse').textContent = response.response;
+                    console.log('✅ AI chat test passed');
+                    return true;
+                } else {
+                    throw new Error('No response from AI');
+                }
+            } catch (error) {
+                console.error('❌ AI chat test failed:', error);
+                document.getElementById('aiResult').textContent = `❌ AI chat test failed: ${error.message}`;
+                document.getElementById('aiResponse').textContent = `Error: ${error.message}`;
+                return false;
+            }
+        }
+
+        // Initialize the test page
+        document.addEventListener('DOMContentLoaded', async () => {
+            console.log('🚀 Onyx Terminal AI Chat Test initialized');
+
+            // Test environment immediately
+            await testEnvironment();
+
+            // Set up event listeners
+            document.getElementById('testEnvironmentBtn').addEventListener('click', testEnvironment);
+            document.getElementById('testRPCBtn').addEventListener('click', testRPCService);
+            document.getElementById('testOnchainBtn').addEventListener('click', testOnchainAgent);
+            document.getElementById('testMarketBtn').addEventListener('click', testMarketAgent);
+            document.getElementById('testAIChatBtn').addEventListener('click', testAIChat);
+
+            // Test all components
+            document.getElementById('testAllBtn').addEventListener('click', async () => {
+                console.log('🔍 Running all tests...');
+                let allPassed = true;
+
+                allPassed = await testEnvironment() && allPassed;
+                allPassed = await testRPCService() && allPassed;
+                allPassed = await testOnchainAgent() && allPassed;
+                allPassed = await testMarketAgent() && allPassed;
+                allPassed = await testAIChat() && allPassed;
+
+                if (allPassed) {
+                    document.getElementById('allResult').textContent = '✅ All tests passed!';
+                    console.log('✅ All tests passed!');
+                } else {
+                    document.getElementById('allResult').textContent = '❌ Some tests failed. Check console for details.';
+                    console.log('❌ Some tests failed.');
+                }
+            });
+        });
+    </script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #0a0a0a;
+            color: #e0e0e0;
+            margin: 0;
+            padding: 20px;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            color: #4a9eff;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .test-section {
+            background-color: #1a1a1a;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            border-left: 4px solid #4a9eff;
+        }
+
+        .test-section h2 {
+            color: #4a9eff;
+            margin-top: 0;
+            display: flex;
+            align-items: center;
+        }
+
+        .test-section h2::before {
+            content: "🔧";
+            margin-right: 10px;
+        }
+
+        .test-result {
+            margin-top: 15px;
+            padding: 10px;
+            border-radius: 4px;
+            font-family: monospace;
+            background-color: #2a2a2a;
+        }
+
+        .success {
+            color: #4ade80;
+            border-left: 3px solid #4ade80;
+        }
+
+        .error {
+            color: #ef4444;
+            border-left: 3px solid #ef4444;
+        }
+
+        button {
+            background-color: #4a9eff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            margin-right: 10px;
+            margin-bottom: 10px;
+            transition: background-color 0.3s;
+        }
+
+        button:hover {
+            background-color: #3a8eef;
+        }
+
+        .test-buttons {
+            margin: 15px 0;
+        }
+
+        .ai-response {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #2a2a2a;
+            border-radius: 4px;
+            border-left: 3px solid #8b5cf6;
+        }
+
+        .token-input {
+            display: flex;
+            gap: 10px;
+            margin: 15px 0;
+        }
+
+        .token-input input {
+            flex: 1;
+            padding: 10px;
+            border-radius: 4px;
+            border: 1px solid #4a5568;
+            background-color: #2a2a2a;
+            color: #e0e0e0;
+            font-family: monospace;
+        }
+
+        .status-indicator {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+
+        .status-success {
+            background-color: #4ade80;
+        }
+
+        .status-error {
+            background-color: #ef4444;
+        }
+
+        .status-unknown {
+            background-color: #6b7280;
+        }
+
+        .test-title {
+            display: flex;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h1>🤖 Onyx Terminal - AI Chat Test</h1>
+
+        <div class="test-section">
+            <div class="test-title">
+                <span class="status-indicator status-unknown" id="environmentStatus"></span>
+                <h2>Environment Test</h2>
+            </div>
+            <div class="test-buttons">
+                <button id="testEnvironmentBtn">Test Environment</button>
+            </div>
+            <div class="test-result" id="environmentResult">
+                Click the button to test environment
+            </div>
+        </div>
+
+        <div class="test-section">
+            <div class="test-title">
+                <span class="status-indicator status-unknown" id="rpcStatus"></span>
+                <h2>RPC Service Test</h2>
+            </div>
+            <div class="test-buttons">
+                <button id="testRPCBtn">Test RPC Service</button>
+            </div>
+            <div class="test-result" id="rpcResult">
+                Click the button to test RPC service
+            </div>
+        </div>
+
+        <div class="test-section">
+            <div class="test-title">
+                <span class="status-indicator status-unknown" id="onchainStatus"></span>
+                <h2>Onchain Agent Test</h2>
+            </div>
+            <div class="token-input">
+                <input type="text" id="tokenAddress" placeholder="So11111111111111111111111111111111111111112"
+                    value="So11111111111111111111111111111111111111112">
+                <button id="testOnchainBtn">Test Onchain Agent</button>
+            </div>
+            <div class="test-result" id="onchainResult">
+                Enter a token address and click the button
+            </div>
+        </div>
+
+        <div class="test-section">
+            <div class="test-title">
+                <span class="status-indicator status-unknown" id="marketStatus"></span>
+                <h2>Market Agent Test</h2>
+            </div>
+            <div class="token-input">
+                <input type="text" id="tokenAddress2" placeholder="So11111111111111111111111111111111111111112"
+                    value="So11111111111111111111111111111111111111112">
+                <button id="testMarketBtn">Test Market Agent</button>
+            </div>
+            <div class="test-result" id="marketResult">
+                Enter a token address and click the button
+            </div>
+        </div>
+
+        <div class="test-section">
+            <div class="test-title">
+                <span class="status-indicator status-unknown" id="aiStatus"></span>
+                <h2>AI Chat Test</h2>
+            </div>
+            <div class="test-buttons">
+                <button id="testAIChatBtn">Test AI Chat</button>
+            </div>
+            <div class="test-result" id="aiResult">
+                Click the button to test AI chat
+            </div>
+            <div class="ai-response" id="aiResponse">
+                AI response will appear here...
+            </div>
+        </div>
+
+        <div class="test-section">
+            <h2>Comprehensive Test</h2>
+            <div class="test-buttons">
+                <button id="testAllBtn">Run All Tests</button>
+            </div>
+            <div class="test-result" id="allResult">
+                Click the button to run all tests
+            </div>
+        </div>
+
+        <div style="text-align: center; margin-top: 30px; color: #6b7280;">
+            <p>📊 Test the Onyx Terminal AI integration and agent system</p>
+        </div>
+    </div>
+
+    <script>
+        // Update status indicators based on test results
+        function updateStatusIndicator(elementId, success) {
+            const indicator = document.getElementById(elementId);
+            if (indicator) {
+                indicator.className = success ? 'status-indicator status-success' : 'status-indicator status-error';
+            }
+        }
+
+        // Override the test functions to update status indicators
+        const originalTestEnvironment = testEnvironment;
+        testEnvironment = async function () {
+            const result = await originalTestEnvironment();
+            updateStatusIndicator('environmentStatus', result);
+            return result;
+        };
+
+        const originalTestRPCService = testRPCService;
+        testRPCService = async function () {
+            const result = await originalTestRPCService();
+            updateStatusIndicator('rpcStatus', result);
+            return result;
+        };
+
+        const originalTestOnchainAgent = testOnchainAgent;
+        testOnchainAgent = async function () {
+            const result = await originalTestOnchainAgent();
+            updateStatusIndicator('onchainStatus', result);
+            return result;
+        };
+
+        const originalTestMarketAgent = testMarketAgent;
+        testMarketAgent = async function () {
+            const result = await originalTestMarketAgent();
+            updateStatusIndicator('marketStatus', result);
+            return result;
+        };
+
+        const originalTestAIChat = testAIChat;
+        testAIChat = async function () {
+            const result = await originalTestAIChat();
+            updateStatusIndicator('aiStatus', result);
+            return result;
+        };
+    </script>
+</body>
+
+</html>

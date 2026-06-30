@@ -36,13 +36,11 @@ export default async function handler(req, res) {
       inputMint,
       outputMint,
       amount,
-      ...(isAuto 
-        ? { autoSlippage: true, autoSlippageCollisionUsdValue: 1000 } 
+      ...(isAuto
+        ? { autoSlippage: true, autoSlippageCollisionUsdValue: 1000 }
         : { slippageBps: manualSlippageBps }),
       platformFeeBps,
-      maxAccounts: 64, // Tambahkan ini agar rute tidak terlalu kompleks
-      restrictIntermediateTokens: false, // Buka akses ke token mecin baru
-      filterSecurityTokens: false // Jangan batasi koin high-risk
+      maxAccounts: 64
     };
 
     console.log("[API-QUOTE] Requesting best inclusive route...");
@@ -53,7 +51,7 @@ export default async function handler(req, res) {
         'Accept': 'application/json'
       }
     });
-    
+
     const quoteData = response.data;
 
     if (quoteData.error) {

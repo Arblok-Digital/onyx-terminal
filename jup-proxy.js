@@ -52,8 +52,8 @@ app.get('/api/jup/quote', async (req, res) => {
 
     // FIX: Handle Auto Slippage lebih robust
     const isAuto = typeof slippageBps === 'string' && slippageBps.toLowerCase().trim() === 'auto';
-    
-    let manualSlippageBps = 50; 
+
+    let manualSlippageBps = 50;
     if (!isAuto && slippageBps) {
       const parsed = parseInt(String(slippageBps), 10);
       if (!isNaN(parsed)) manualSlippageBps = parsed;
@@ -63,13 +63,11 @@ app.get('/api/jup/quote', async (req, res) => {
       inputMint,
       outputMint,
       amount,
-      ...(isAuto 
-        ? { autoSlippage: true, autoSlippageCollisionUsdValue: 1000 } 
+      ...(isAuto
+        ? { autoSlippage: true, autoSlippageCollisionUsdValue: 1000 }
         : { slippageBps: manualSlippageBps }),
       platformFeeBps,
-      maxAccounts: 64, 
-      restrictIntermediateTokens: false, 
-      filterSecurityTokens: false 
+      maxAccounts: 64
     };
 
     const response = await axios.get(`${JUP_BASE_URL}/quote`, {
@@ -117,8 +115,8 @@ app.post('/api/jup/swap', async (req, res) => {
       userPublicKey,
       wrapAndUnwrapSol,
       dynamicComputeUnitLimit: true,
-      prioritizationFeeLamports: 2000000, 
-      asLegacyTransaction: false, 
+      prioritizationFeeLamports: 2000000,
+      asLegacyTransaction: false,
       // HAPUS destinationTokenAccount: Jupiter bakal otomatis bikin ATA yang paling bener (Token vs Token2022)
     };
 
