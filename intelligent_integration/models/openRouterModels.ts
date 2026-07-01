@@ -10,6 +10,7 @@
  *
  * @exposes OPENROUTER_MODELS, OPENROUTER_TASK_CONFIG, getOpenRouterModel
  */
+import { getEnv } from '../utils';
 
 // TypeScript interface for Vite environment variables
 interface ImportMetaEnv {
@@ -105,7 +106,7 @@ export const OPENROUTER_MODELS = [
         name: 'openrouter-deepseek-r1',
         model: 'deepseek/deepseek-r1:free',
         task: 'report' as OpenRouterTask,
-        priority: 4, // After AMD (1-3), before other fallbacks
+        priority: 4, // After 9Router (1-3), before other fallbacks
         enabled: true,
     },
     {
@@ -153,15 +154,13 @@ export function getOpenRouterTaskConfig(task: OpenRouterTask) {
 
 /**
  * Check if OpenRouter is enabled and configured.
- * Reads from Vite env vars (import.meta.env).
+ * Reads from environment variables.
  * @returns boolean - true if API key exists and enabled flag is true
  */
 export function isOpenRouterEnabled(): boolean {
     try {
-        // Safe access to import.meta.env with proper typing
-        const env = typeof import.meta !== 'undefined' && import.meta.env ? import.meta.env as ImportMetaEnv : {} as ImportMetaEnv;
-        const enabled = env.VITE_OPENROUTER_ENABLED !== 'false';
-        const hasKey = !!env.VITE_OPENROUTER_API_KEY;
+        const enabled = getEnv('VITE_OPENROUTER_ENABLED', 'false') !== 'false';
+        const hasKey = !!getEnv('VITE_OPENROUTER_API_KEY', '');
         return enabled && hasKey;
     } catch (error) {
         console.error('Error checking OpenRouter enabled status:', error);
@@ -175,9 +174,7 @@ export function isOpenRouterEnabled(): boolean {
  */
 export function getOpenRouterApiKey(): string {
     try {
-        // Safe access to import.meta.env with proper typing
-        const env = typeof import.meta !== 'undefined' && import.meta.env ? import.meta.env as ImportMetaEnv : {} as ImportMetaEnv;
-        return env.VITE_OPENROUTER_API_KEY || '';
+        return getEnv('VITE_OPENROUTER_API_KEY', '');
     } catch (error) {
         console.error('Error getting OpenRouter API key:', error);
         return '';

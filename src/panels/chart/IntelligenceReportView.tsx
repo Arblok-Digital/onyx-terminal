@@ -1,9 +1,9 @@
 /**
  * @file IntelligenceReportView.tsx
  * @layer panel
- * @desc Visual component for displaying AMD Intelligence Report in Chart panel
+ * @desc Visual component for displaying Intelligence Report in Chart panel
  * @exposes IntelligenceReportView
- * @deps amd_integration/types/analysisTypes, ui components
+ * @deps intelligent_integration/types/analysisTypes, ui components
  */
 
 import React from "react";
@@ -256,9 +256,9 @@ const IntelligenceReportView: React.FC<IntelligenceReportViewProps> = ({ report 
         <div className={styles.intelligenceReport}>
             {/* Header */}
             <div className={styles.reportHeader}>
-                <div className={styles.reportTitle}>AMD INTELLIGENCE REPORT</div>
+<div className={styles.reportTitle}>INTELLIGENCE REPORT</div>
                 <div className={styles.reportMetadata}>
-                    <span>Model: {report.metadata?.routingDecision?.modelUsed || "AMD AI"}</span>
+<span>Model: {report.metadata?.routingDecision?.modelUsed || "Intelligent AI"}</span>
                     <span>Confidence: {formatConfidence(report.confidenceScore)}</span>
                     <span>Analysis Time: {new Date(report.metadata?.timestamp || Date.now()).toLocaleTimeString()}</span>
                 </div>

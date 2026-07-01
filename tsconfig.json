@@ -31,11 +31,11 @@
       "@/*": [
         "./src/*"
       ],
-      "@amd_integration": [
-        "./amd_integration/index.ts"
+      "@intelligent_integration": [
+        "./intelligent_integration/index.ts"
       ],
-      "@amd_integration/*": [
-        "./amd_integration/*"
+      "@intelligent_integration/*": [
+        "./intelligent_integration/*"
       ]
     }
   }

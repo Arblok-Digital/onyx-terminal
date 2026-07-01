@@ -14,7 +14,7 @@ import { bus } from "@/core/event-bus";
 import ChartEmbed from "./ChartEmbed";
 import { DEFAULT_CHART_OPTIONS, RESOLUTIONS } from "./chart.config";
 import { formatPrice, formatPercent, formatCompact } from "@/utils/format";
-import { analyzeToken } from "@amd_integration";
+import { analyzeToken } from "@intelligent_integration";
 import IntelligenceReportView from "./IntelligenceReportView";
 import styles from "./Chart.module.css";
 import type { ChartEmbedOptions } from "@/feeds/geckoterminal";

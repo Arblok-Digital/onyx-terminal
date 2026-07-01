@@ -1,6 +1,6 @@
 /**
- * @file amd_integration/index.d.ts
- * @desc Type declarations for AMD Integration module
+ * @file intelligent_integration/index.d.ts
+ * @desc Type declarations for 9Router Intelligence module
  */
 
 export * from './types/analysisTypes';

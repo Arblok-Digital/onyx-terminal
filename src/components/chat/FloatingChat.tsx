@@ -4,13 +4,13 @@
  * @desc AI Chat Assistant for Onyx Terminal — conversational interface to AMD Intelligence.
  *       User asks in natural language → intent routed → analyzeToken() → formatted answer.
  * @exposes FloatingChat
- * @deps amd_integration (analyzeToken), core/store/ui.store, OnyxChat.module.css
+ * @deps intelligent_integration (analyzeToken), core/store/ui.store, OnyxChat.module.css
  */
 
 import React, { useState, useRef, useEffect, useCallback } from "react";
 import { useUIStore } from "@/core/store/ui.store";
 import styles from "./OnyxChat.module.css";
-import { analyzeToken, IntelligenceReport } from "@amd_integration";
+import { analyzeToken, IntelligenceReport } from "@intelligent_integration";
 import { getDashboardContext } from "@/services/dashboardDataService";
 
 /* ------------------------------------------------------------------ */

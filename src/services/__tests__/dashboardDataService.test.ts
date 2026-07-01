@@ -40,7 +40,7 @@ vi.mock('@/core/store/price.store', () => ({
     },
 }));
 
-vi.mock('@amd_integration', () => ({
+vi.mock('@intelligent_integration', () => ({
     analyzeToken: vi.fn(async (address: string) => {
         if (address === "0xerror") {
             throw new Error("Simulated AI analysis error");
@@ -88,7 +88,7 @@ describe('DashboardDataService', () => {
             expect(context).toContain("--- PRICE MOVEMENTS ---");
             expect(context).toContain("--- VOLUME ANALYSIS ---");
             expect(context).toContain("--- TRANSACTION ANALYSIS ---");
-            expect(context).toContain("--- AMD INTELLIGENCE REPORT ---");
+expect(context).toContain("--- INTELLIGENCE REPORT ---");
         });
 
         it('should handle unknown tokens gracefully', async () => {
@@ -128,7 +128,7 @@ describe('DashboardDataService', () => {
         it('should handle AI analysis errors gracefully', async () => {
             const context = await getDashboardContext("0xerror");
 
-            expect(context).toContain("--- AMD INTELLIGENCE REPORT ---");
+            expect(context).toContain("--- INTELLIGENCE REPORT ---");
             expect(context).toContain("Error: Simulated AI analysis error");
             expect(context).toContain("Recommendation: N/A");
             expect(context).toContain("Confidence Score: 0%");
@@ -227,7 +227,7 @@ describe('DashboardDataService', () => {
             expect(formatted).toContain("--- PRICE MOVEMENTS ---");
             expect(formatted).toContain("--- VOLUME ANALYSIS ---");
             expect(formatted).toContain("--- TRANSACTION ANALYSIS ---");
-            expect(formatted).toContain("--- AMD INTELLIGENCE REPORT ---");
+            expect(formatted).toContain("--- INTELLIGENCE REPORT ---");
             expect(formatted).toContain("=== END OF DASHBOARD DATA ===");
         });
     });

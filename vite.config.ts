@@ -79,13 +79,13 @@ export default defineConfig({
     global: "globalThis",
     "process.env": "{}",
   },
-  resolve: {
-    alias: {
-      "@": path.resolve(import.meta.dirname, "src"),
-      "@assets": path.resolve(import.meta.dirname, "attached_assets"),
-      "@amd_integration": path.resolve(import.meta.dirname, "amd_integration"),
-    },
-    dedupe: ["react", "react-dom"],
+    resolve: {
+      alias: {
+        "@": path.resolve(import.meta.dirname, "src"),
+        "@assets": path.resolve(import.meta.dirname, "attached_assets"),
+        "@intelligent_integration": path.resolve(import.meta.dirname, "intelligent_integration"),
+      },
+      dedupe: ["react", "react-dom"],
   },
   root: path.resolve(import.meta.dirname),
   build: {

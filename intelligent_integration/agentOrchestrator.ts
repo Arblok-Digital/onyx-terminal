@@ -10,7 +10,7 @@ import { OpportunityAgent } from './agents/opportunityAgent';
 import { NarrativeAgent } from './agents/narrativeAgent';
 import { SmartMoneyAgent } from './agents/smartMoneyAgent';
 import { SurvivalAgent } from './agents/survivalAgent';
-import { AMDResearchManager } from './services/amdAIService';
+import { OpenRouterResearchManager } from './services/openRouterService/index';
 import {
     IntelligenceReport,
     FlowAnalysis,
@@ -30,7 +30,7 @@ export class AgentOrchestrator {
     protected narrativeAgent: NarrativeAgent;
     protected smartMoneyAgent: SmartMoneyAgent;
     protected survivalAgent: SurvivalAgent;
-    protected researchManager: AMDResearchManager;
+    protected researchManager: OpenRouterResearchManager;
     protected analysisCache: Map<string, { report: IntelligenceReport, timestamp: number }>;
     protected cacheTTL: number = 3600000; // 1 hour
 
@@ -42,7 +42,7 @@ export class AgentOrchestrator {
         this.narrativeAgent = new NarrativeAgent();
         this.smartMoneyAgent = new SmartMoneyAgent();
         this.survivalAgent = new SurvivalAgent();
-        this.researchManager = new AMDResearchManager();
+        this.researchManager = new OpenRouterResearchManager();
         this.analysisCache = new Map();
     }
 
@@ -92,7 +92,7 @@ export class AgentOrchestrator {
                     'Helius API',
                     'Birdeye API',
                     'CoinGecko API',
-                    'AMD Cloud AI',
+                    'OpenRouter AI',
                     'Narrative Intelligence',
                     'Smart Money Database'
                 ]

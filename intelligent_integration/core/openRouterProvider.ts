@@ -3,7 +3,7 @@
  * @layer core
  * @desc OpenRouter AI provider - OpenAI-compatible API with free model access.
  *       Provides chat() and chatWithFallback() methods for AI calls.
- *       Used as fallback tier when 9Router Gateway and AMD Cloud are unavailable.
+ *       Used as fallback tier when 9Router Gateway and 9Router Cloud are unavailable.
  *
  * @exposes OpenRouterProvider
  */

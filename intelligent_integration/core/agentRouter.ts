@@ -26,6 +26,7 @@ import {
     getOpenRouterApiKey
 } from '../models/openRouterModels';
 import { getOpenRouterProvider } from './openRouterProvider';
+import { getEnv } from '../utils';
 
 export interface RoutingDecision {
     primaryAgent: string;
@@ -59,7 +60,7 @@ export class AgentRouter extends AgentOrchestrator {
         this.agentConfigs = this.loadAgentConfigs();
         this.fallbackModels = this.loadFallbackConfigs();
         this.currentFallbackStatus = {
-            currentModel: 'amd-llama-3.1-70b',
+            currentModel: '9router-gateway',
             fallbackTriggered: false,
             fallbackReason: '',
             fallbackHistory: []
@@ -71,19 +72,19 @@ export class AgentRouter extends AgentOrchestrator {
      */
     private getEnv(key: string, defaultValue: string): string {
         // Browser environment (Vite)
-        if (typeof import.meta !== 'undefined' && import.meta.env) {
-            return import.meta.env[key] || defaultValue;
+        if (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env[key]) {
+            return import.meta.env[key];
         }
         // Node.js environment
-        if (typeof process !== 'undefined' && process.env) {
-            return process.env[key] || defaultValue;
+        if (typeof process !== 'undefined' && process.env && process.env[key]) {
+            return process.env[key]!;
         }
         return defaultValue;
     }
 
     /**
      * Load agent configurations
-     * Priority: 9Router Gateway > AMD Cloud > Fallback
+     * Priority: 9Router Gateway > 9Router Cloud > Fallback
      */
     private loadAgentConfigs(): AgentConfig[] {
         // In production, this would load from config file
@@ -96,18 +97,18 @@ export class AgentRouter extends AgentOrchestrator {
                 priority: 1,
                 enabled: true
             },
-            // === AMD Cloud (Production - Nunggu Approval Credit) ===
+            // === 9Router Cloud (Production) ===
             {
-                name: 'amd-llama-3.1-70b',
+                name: '9router-llama-3.1-70b',
                 model: 'llama-3.1-70b',
-                endpoint: process.env.AMD_LLAMA_ENDPOINT || 'https://api.amdcloud.ai/v1/llama-3.1-70b',
+                endpoint: this.getEnv('VITE_9ROUTER_LLAMA_ENDPOINT', 'https://api.9router.ai/v1/llama-3.1-70b'),
                 priority: 2,
                 enabled: true
             },
             {
-                name: 'amd-mistral-large-2',
+                name: '9router-mistral-large-2',
                 model: 'mistral-large-2',
-                endpoint: process.env.AMD_MISTRAL_ENDPOINT || 'https://api.amdcloud.ai/v1/mistral-large-2',
+                endpoint: this.getEnv('VITE_9ROUTER_MISTRAL_ENDPOINT', 'https://api.9router.ai/v1/mistral-large-2'),
                 priority: 3,
                 enabled: true
             },
@@ -168,14 +169,14 @@ export class AgentRouter extends AgentOrchestrator {
             {
                 name: 'huggingface-llama',
                 model: 'llama-3.1-70b',
-                endpoint: process.env.HF_LLAMA_ENDPOINT || 'https://api-inference.huggingface.co/models/amd/llama-3.1-70b',
+                endpoint: this.getEnv('VITE_HF_LLAMA_ENDPOINT', 'https://api-inference.huggingface.co/models/9router/llama-3.1-70b'),
                 priority: 2,
                 enabled: true
             },
             {
                 name: 'replicate-mistral',
                 model: 'mistral-large-2',
-                endpoint: process.env.REPLICATE_MISTRAL_ENDPOINT || 'https://api.replicate.com/v1/predictions',
+                endpoint: this.getEnv('VITE_REPLICATE_MISTRAL_ENDPOINT', 'https://api.replicate.com/v1/predictions'),
                 priority: 3,
                 enabled: true
             },
@@ -265,7 +266,7 @@ export class AgentRouter extends AgentOrchestrator {
 
     /**
      * Determine the best agent to use based on current conditions
-     * Priority: 9Router Gateway > AMD Cloud > Fallback
+     * Priority: 9Router Gateway > 9Router Cloud > Fallback
      */
     private async determineRouting(tokenAddress: string): Promise<RoutingDecision> {
         // Priority 1: 9Router Gateway (free, auto-fallback models)
@@ -280,14 +281,14 @@ export class AgentRouter extends AgentOrchestrator {
             };
         }
 
-        // Priority 2: AMD Cloud (when credits approved)
-        const amdAvailable = await this.checkAMDAvailability();
+        // Priority 2: 9Router Cloud (when available)
+        const routerAvailable = await this.check9RouterAvailability();
 
-        if (amdAvailable) {
-            // Use primary AMD model
+        if (routerAvailable) {
+            // Use primary 9Router model
             return {
-                primaryAgent: 'amd-llama-3.1-70b',
-                reason: 'AMD Cloud available and operational',
+                primaryAgent: '9router-llama-3.1-70b',
+                reason: '9Router Cloud available and operational',
                 confidence: 0.95,
                 modelUsed: 'llama-3.1-70b',
                 isFallback: false
@@ -323,12 +324,12 @@ export class AgentRouter extends AgentOrchestrator {
     }
 
     /**
-     * Check AMD Cloud availability
+     * Check 9Router Cloud availability
      */
-    private async checkAMDAvailability(): Promise<boolean> {
+    private async check9RouterAvailability(): Promise<boolean> {
         try {
-            // In production, this would ping the actual AMD endpoints
-            const primaryConfig = this.agentConfigs.find(c => c.name === 'amd-llama-3.1-70b');
+            // In production, this would ping the actual 9Router endpoints
+            const primaryConfig = this.agentConfigs.find(c => c.name === '9router-llama-3.1-70b');
             if (!primaryConfig || !primaryConfig.enabled) return false;
 
             // Create abort controller for timeout
@@ -339,7 +340,7 @@ export class AgentRouter extends AgentOrchestrator {
                 method: 'GET',
                 headers: {
                     'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${process.env.AMD_API_KEY || ''}`
+                    'Authorization': `Bearer ${this.getEnv('VITE_9ROUTER_API_KEY', '')}`
                 },
                 signal: controller.signal
             });
@@ -347,7 +348,7 @@ export class AgentRouter extends AgentOrchestrator {
             clearTimeout(timeoutId);
             return response.ok;
         } catch (error) {
-            console.warn('AMD Cloud availability check failed:', error instanceof Error ? error.message : String(error));
+            console.warn('9Router Cloud availability check failed:', error instanceof Error ? error.message : String(error));
             return false;
         }
     }
@@ -710,18 +711,18 @@ export class AgentRouter extends AgentOrchestrator {
             case '9router-gateway':
             case '9router-arblok':
                 return this.getEnv('VITE_AI_GATEWAY_KEY', 'arblok');
-            case 'amd-llama-3.1-70b':
-            case 'amd-mistral-large-2':
-                return process.env.AMD_API_KEY || '';
+            case '9router-llama-3.1-70b':
+            case '9router-mistral-large-2':
+                return this.getEnv('VITE_9ROUTER_API_KEY', '');
             case 'openrouter-deepseek-r1':
             case 'openrouter-llama-3.3-70b':
             case 'openrouter-mistral-7b':
             case 'openrouter-qwen-2.5-7b':
                 return getOpenRouterApiKey();
             case 'huggingface-llama':
-                return process.env.HF_API_KEY || '';
+                return this.getEnv('VITE_HF_API_KEY', '');
             case 'replicate-mistral':
-                return process.env.REPLICATE_API_KEY || '';
+                return this.getEnv('VITE_REPLICATE_API_KEY', '');
             default:
                 return '';
         }
@@ -1037,7 +1038,7 @@ export class AgentRouter extends AgentOrchestrator {
                 'Jupiter Websocket',
                 'Helius API',
                 'Birdeye API',
-                'AMD Cloud AI',
+                '9Router Cloud AI',
                 'Narrative Intelligence',
                 'Smart Money Database'
             ],

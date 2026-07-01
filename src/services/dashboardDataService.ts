@@ -2,12 +2,12 @@
  * @file dashboardDataService.ts
  * @layer service
  * @desc Aggregates real-time dashboard data from multiple sources for AI chatbot context.
- *       Combines DexScreener market data, price store snapshots, and AMD Intelligence reports.
+ *       Combines DexScreener market data, price store snapshots, and AI Intelligence reports.
  * @exposes DashboardDataService, getDashboardContext
  */
 
 import { usePriceStore, TokenSnapshot } from "@/core/store/price.store";
-import { analyzeToken, IntelligenceReport } from "@amd_integration";
+import { analyzeToken, IntelligenceReport, FlowAnalysis, OnchainAnalysis, MarketAnalysis } from "@intelligent_integration";
 
 /**
  * Aggregated dashboard data for AI context
@@ -59,7 +59,7 @@ export interface DashboardData {
         buyPressure?: string; // "high" | "medium" | "low"
     };
 
-    // AMD Intelligence Report (if available)
+    // AI Intelligence Report (if available)
     intelligence?: {
         recommendation?: string;
         confidenceScore?: number;
@@ -168,20 +168,86 @@ export async function getDashboardData(tokenAddress: string): Promise<DashboardD
         },
     };
 
-    // Try to get AMD Intelligence Report
+    // Try to get AI Intelligence Report
     try {
-        const report = await analyzeToken(tokenAddress);
+        // Generate mock data for the analysis
+        const flowData: FlowAnalysis = {
+            token: tokenAddress,
+            patterns: [],
+            confidence: 0,
+            evidence: []
+        };
+
+        const onchainData: OnchainAnalysis = {
+            token: tokenAddress,
+            whaleActivity: {
+                largeTransfers: 0,
+                whaleWallets: 0,
+                concentration: 0
+            },
+            holderGrowth: {
+                newHolders: 0,
+                growthRate: 0
+            },
+            developerActivity: {
+                devWalletTransactions: 0,
+                suspiciousTransfers: 0,
+                devWalletBalance: 0,
+                devWallets: []
+            },
+            liquidityAnalysis: {
+                liquidityDepth: 0,
+                liquidityChange24h: 0,
+                lockedLiquidity: 0,
+                liquidityConcentration: 0
+            },
+            rugPullIndicators: {
+                dumpScore: 0,
+                liquidityRemovalScore: 0,
+                devWalletActivityScore: 0,
+                overallRugScore: 0
+            },
+            riskScore: 0
+        };
+
+        const marketData: MarketAnalysis = {
+            token: tokenAddress,
+            priceTrend: {
+                current: 0,
+                change24h: 0,
+                change7d: 0
+            },
+            volumeAnalysis: {
+                volume24h: 0,
+                volumeChange: 0
+            },
+            liquidityAnalysis: {
+                depth: 0,
+                slippage: 0
+            },
+            volatilityScore: 0,
+            sentimentAnalysis: {
+                sentimentScore: 0,
+                positiveMentions: 0,
+                negativeMentions: 0,
+                neutralMentions: 0,
+                sentimentTrend: 0,
+                source: 'n/a'
+            }
+        };
+
+        const report = await analyzeToken(tokenAddress, flowData, onchainData, marketData);
         data.intelligence = {
             recommendation: report.recommendation,
             confidenceScore: report.confidenceScore,
             executiveSummary: report.executiveSummary,
-            rugPullWarning: report.rugPullIndicators?.warningLevel,
-            smartMoneyActivity: report.smartMoneyAnalysis?.verdict,
-            narrativeStrength: report.narrativeAnalysis?.strength,
-            opportunityScore: report.opportunityAssessment?.score,
-            keyInsights: report.keyInsights?.slice(0, 5).map((ki: any) =>
-                `[${ki.category}] ${ki.insight} (${(ki.confidence * 100).toFixed(0)}%)`
-            ),
+            rugPullWarning: report.intelligenceRanking?.rating === 'AVOID' ? 'high' : 'low',
+            smartMoneyActivity: report.smartMoneyAnalysis ? 'active' : 'inactive',
+            narrativeStrength: report.narrativeAnalysis ? report.narrativeAnalysis.narrativeStrength.toString() : '0',
+            opportunityScore: report.intelligenceRanking?.opportunityScore || 0,
+            keyInsights: report.keyInsights?.slice(0, 5).map((ki) =>
+                `[${ki.category || 'general'}] ${ki.insight} (${Math.round(ki.confidence * 100)}%)`
+            ) || [],
         };
         data.dataAvailability.hasIntelligence = true;
     } catch (error: any) {
@@ -251,13 +317,13 @@ export function formatDashboardContext(data: DashboardData): string {
 
     // Intelligence Report
     if (data.intelligenceError) {
-        lines.push("--- AMD INTELLIGENCE REPORT ---");
+        lines.push("--- INTELLIGENCE REPORT ---");
         lines.push(`Error: ${data.intelligenceError}`);
         lines.push(`Recommendation: N/A`); // Set to N/A if error
         lines.push(`Confidence Score: 0%`); // Set to 0% if error
         lines.push("");
     } else if (data.dataAvailability.hasIntelligence && data.intelligence) {
-        lines.push("--- AMD INTELLIGENCE REPORT ---");
+        lines.push("--- INTELLIGENCE REPORT ---");
         lines.push(`Recommendation: ${data.intelligence.recommendation || "N/A"}`);
         lines.push(`Confidence Score: ${data.intelligence.confidenceScore ? (data.intelligence.confidenceScore * 100).toFixed(0) + "%" : "N/A"}`);
 
