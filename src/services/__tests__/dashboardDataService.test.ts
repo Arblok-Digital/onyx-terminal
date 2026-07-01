@@ -60,7 +60,11 @@ vi.mock('@intelligent_integration', () => ({
                 verdict: "Accumulation Phase",
             },
             narrativeAnalysis: {
-                strength: "MODERATE",
+                token: address,
+                narrative: "AI Infrastructure",
+                confidence: 0.8,
+                evidence: ["Rising interest in AI projects"],
+                narrativeStrength: 75,
             },
             opportunityAssessment: {
                 score: 0.75,
@@ -177,6 +181,7 @@ expect(context).toContain("--- INTELLIGENCE REPORT ---");
                 executiveSummary: "Strong bullish momentum",
                 rugPullWarning: "LOW",
                 smartMoneyActivity: "Accumulation",
+                narrativeStrength: "75",
                 opportunityScore: 0.75,
                 keyInsights: ["Strong momentum", "Low risk"],
             },

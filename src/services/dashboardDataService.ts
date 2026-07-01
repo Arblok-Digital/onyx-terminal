@@ -243,7 +243,7 @@ export async function getDashboardData(tokenAddress: string): Promise<DashboardD
             executiveSummary: report.executiveSummary,
             rugPullWarning: report.intelligenceRanking?.rating === 'AVOID' ? 'high' : 'low',
             smartMoneyActivity: report.smartMoneyAnalysis ? 'active' : 'inactive',
-            narrativeStrength: report.narrativeAnalysis ? report.narrativeAnalysis.narrativeStrength.toString() : '0',
+            narrativeStrength: report.narrativeAnalysis?.narrativeStrength?.toString() ?? '0',
             opportunityScore: report.intelligenceRanking?.opportunityScore || 0,
             keyInsights: report.keyInsights?.slice(0, 5).map((ki) =>
                 `[${ki.category || 'general'}] ${ki.insight} (${Math.round(ki.confidence * 100)}%)`
