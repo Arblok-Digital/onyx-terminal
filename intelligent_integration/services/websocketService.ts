@@ -6,6 +6,9 @@
  * Helius WS also fails with ERR_NAME_NOT_RESOLVED (requires Node.js DNS).
  * Kept for reference; will reconnect with proxy if needed.
  */
+import { injectable, inject } from 'inversify';
+import type { Logger } from '../core/logger';
+import { TOKENS } from '../core/diTokens';
 
 const DEFAULT_WS_ENDPOINTS = {
     jupiter: 'wss://stream.jup.ag/v1/ws',
@@ -18,6 +21,7 @@ const WS_RECONNECT_DELAYS = {
     factor: 1.5,
 };
 
+@injectable()
 export class WebsocketService {
     private socket: WebSocket | null = null;
     private eventHandlers: Map<string, (data: any) => void>;
@@ -26,10 +30,15 @@ export class WebsocketService {
     private reconnectDelay: number = WS_RECONNECT_DELAYS.initial;
     private isDisabled: boolean = true;
     private pendingSubscriptions: Set<string> = new Set();
+    private logger: Logger;
 
-    constructor(private endpoint: string = DEFAULT_WS_ENDPOINTS.jupiter) {
+    constructor(
+        @inject(TOKENS.Logger) logger: Logger,
+        private endpoint: string = DEFAULT_WS_ENDPOINTS.jupiter
+    ) {
+        this.logger = logger;
         this.eventHandlers = new Map();
-        console.log(`🔌 WebSocket DISABLED (${endpoint}) — requires proxy/node setup to re-enable`);
+        this.logger.info(`🔌 WebSocket DISABLED (${endpoint}) — requires proxy/node setup to re-enable`);
     }
 
     /**
@@ -40,7 +49,7 @@ export class WebsocketService {
         this.maxReconnectAttempts = 5;
         if (endpoint) this.endpoint = endpoint;
         this.reconnectAttempts = 0;
-        console.log(`🔌 WebSocket enabled for ${this.endpoint}`);
+        this.logger.info(`🔌 WebSocket enabled for ${this.endpoint}`);
         this.connect();
     }
 
@@ -52,7 +61,7 @@ export class WebsocketService {
 
             this.socket.onopen = () => {
                 this.reconnectAttempts = 0;
-                console.log(`✅ WebSocket connected to ${this.endpoint}`);
+                this.logger.info(`✅ WebSocket connected to ${this.endpoint}`);
                 this.pendingSubscriptions.forEach(token => {
                     this.subscribeToToken(token, () => { });
                 });
@@ -63,20 +72,20 @@ export class WebsocketService {
                     const data = JSON.parse(event.data);
                     this.handleIncomingData(data);
                 } catch (error) {
-                    console.error('Error parsing websocket message:', error);
+                    this.logger.error('Error parsing websocket message:', error as Error);
                 }
             };
 
             this.socket.onclose = () => {
-                console.log('🔌 WebSocket closed');
+                this.logger.info('🔌 WebSocket closed');
                 this.scheduleReconnect();
             };
 
             this.socket.onerror = (error) => {
-                console.warn('⚠️ WebSocket error (expected without proxy):', error);
+                this.logger.warn('⚠️ WebSocket error (expected without proxy):', error as any);
             };
         } catch (err) {
-            console.warn('⚠️ WebSocket connect failed:', err);
+            this.logger.warn('⚠️ WebSocket connect failed:', err as any);
         }
     }
 
@@ -88,10 +97,10 @@ export class WebsocketService {
                 this.reconnectDelay * Math.pow(WS_RECONNECT_DELAYS.factor, this.reconnectAttempts),
                 WS_RECONNECT_DELAYS.max,
             );
-            console.log(`🔄 Reconnecting in ${Math.round(delay)}ms (attempt ${this.reconnectAttempts})`);
+            this.logger.info(`🔄 Reconnecting in ${Math.round(delay)}ms (attempt ${this.reconnectAttempts})`);
             setTimeout(() => this.connect(), delay);
         } else {
-            console.warn('❌ Max reconnection attempts reached — WebSocket disabled');
+            this.logger.warn('❌ Max reconnection attempts reached — WebSocket disabled');
             this.isDisabled = true;
         }
     }

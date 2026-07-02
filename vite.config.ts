@@ -2,7 +2,6 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import path from "path";
 import { VitePWA } from "vite-plugin-pwa";
-
 const DEFAULT_PORT = 5173;
 
 export default defineConfig({
@@ -78,9 +77,11 @@ export default defineConfig({
   define: {
     global: "globalThis",
     "process.env": "{}",
+    "Buffer": "globalThis.Buffer",
   },
     resolve: {
       alias: {
+        "buffer": "buffer",
         "@": path.resolve(import.meta.dirname, "src"),
         "@assets": path.resolve(import.meta.dirname, "attached_assets"),
         "@intelligent_integration": path.resolve(import.meta.dirname, "intelligent_integration"),
@@ -92,6 +93,12 @@ export default defineConfig({
     outDir: "dist"
   },
   optimizeDeps: {
+    esbuildOptions: {
+        define: {
+            global: 'globalThis',
+            Buffer: 'globalThis.Buffer',
+        },
+    },
     include: ['react', 'react-dom', 'bn.js', 'buffer']
   },
   server: {
@@ -100,6 +107,19 @@ export default defineConfig({
     host: "0.0.0.0",
     allowedHosts: true,
     fs: { strict: true },
+    headers: {
+      "Content-Security-Policy": [
+        "default-src 'self'",
+        "script-src 'self' 'unsafe-eval' 'unsafe-inline' https://*.walletconnect.com https://*.solflare.com https://*.phantom.app",
+        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+        "img-src 'self' data: blob: https://*.dexscreener.com https://arweave.net https://*.arweave.net https://img-v2.galxy.io",
+        "font-src 'self' https://fonts.gstatic.com https://fonts.googleapis.com",
+        "connect-src 'self' http://localhost:3001 ws://localhost:3001 https://api.dexscreener.com https://quote-api.jup.ag https://api.jup.ag https://*.supabase.co wss://*.supabase.co https://openrouter.ai https://api.9router.com https://api.mainnet-beta.solana.com https://api.devnet.solana.com https://api.testnet.solana.com https://*.solana.com wss://*.solana.com wss://api.devnet.solana.com https://fonts.googleapis.com wss://fonts.googleapis.com",
+        "frame-src 'self' https://*.walletconnect.com https://*.solflare.com https://*.phantom.app https://www.geckoterminal.com",
+        "manifest-src 'self'",
+        "worker-src 'self' blob:",
+      ].join("; "),
+    },
   },
   preview: {
     port: DEFAULT_PORT,

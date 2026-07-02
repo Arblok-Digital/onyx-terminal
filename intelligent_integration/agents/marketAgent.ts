@@ -3,33 +3,25 @@
  * Analyzes market data from Jupiter and CoinGecko
  */
 
-import { MarketAnalysis } from '../types/analysisTypes';
+import { injectable, inject } from 'inversify';
+import type { MarketAnalysis } from '../types/analysisTypes';
+import type { Logger } from '../core/logger';
+import { TOKENS } from '../core/diTokens';
+import { getEnv } from '../utils/getEnv';
 
+@injectable()
 export class MarketAgent {
     private jupiterApiKey: string;
     private coingeckoApiKey: string;
     private cache: Map<string, { data: any, timestamp: number }>;
     private cacheTTL: number = 300000; // 5 minutes
+    private logger: Logger;
 
-    /**
-     * Get environment variable in a cross-environment way
-     */
-    private getEnv(key: string, defaultValue: string = ''): string {
-        // Browser environment (Vite)
-        if (typeof import.meta !== 'undefined' && import.meta.env) {
-            return import.meta.env[key] || defaultValue;
-        }
-        // Node.js environment
-        if (typeof process !== 'undefined' && process.env) {
-            return process.env[key] || defaultValue;
-        }
-        return defaultValue;
-    }
-
-    constructor() {
-        this.jupiterApiKey = this.getEnv('VITE_JUPITER_API_KEY');
-        this.coingeckoApiKey = this.getEnv('VITE_COINGECKO_API_KEY');
+    constructor(@inject(TOKENS.Logger) logger: Logger) {
+        this.jupiterApiKey = getEnv('VITE_JUPITER_API_KEY', '');
+        this.coingeckoApiKey = getEnv('VITE_COINGECKO_API_KEY', '');
         this.cache = new Map();
+        this.logger = logger;
     }
 
     /**
@@ -65,7 +57,7 @@ export class MarketAgent {
                 marketCap
             });
         } catch (error) {
-            console.error('Error analyzing market data:', error);
+            this.logger.error('Error analyzing market data', error as Error, { tokenAddress });
             return this.createFallbackAnalysis(tokenAddress);
         }
     }
@@ -93,7 +85,7 @@ export class MarketAgent {
 
             return await response.json();
         } catch (error) {
-            console.warn(`CoinGecko API failed, using fallback: ${(error as Error).message}`);
+            this.logger.warn('CoinGecko price API failed, using fallback', { tokenAddress, error: (error as Error).message });
             // Return mock price data when API fails
             return {
                 prices: [
@@ -112,7 +104,7 @@ export class MarketAgent {
     private async getTokenVolume(tokenAddress: string): Promise<any> {
         try {
             // Use the Jup proxy endpoint
-            const proxyUrl = this.getEnv('VITE_JUP_PROXY_URL') || 'http://localhost:3001';
+            const proxyUrl = getEnv('VITE_JUP_PROXY_URL') || 'http://localhost:3001';
             const response = await fetch(
                 `${proxyUrl}/api/jup/token/${tokenAddress}?vsToken=USDC`
             );
@@ -123,7 +115,7 @@ export class MarketAgent {
 
             return await response.json();
         } catch (error) {
-            console.warn(`Jupiter volume API failed, using fallback: ${(error as Error).message}`);
+            this.logger.warn('Jupiter volume API failed, using fallback', { tokenAddress, error: (error as Error).message });
             // Return mock volume data when API fails
             return {
                 volume: 1000000,
@@ -138,7 +130,7 @@ export class MarketAgent {
     private async getOrderBook(tokenAddress: string): Promise<any> {
         try {
             // Use the Jup proxy endpoint
-            const proxyUrl = this.getEnv('VITE_JUP_PROXY_URL') || 'http://localhost:3001';
+            const proxyUrl = getEnv('VITE_JUP_PROXY_URL') || 'http://localhost:3001';
             const response = await fetch(
                 `${proxyUrl}/api/jup/orderbook?inputMint=${tokenAddress}&outputMint=USDC`
             );
@@ -149,7 +141,7 @@ export class MarketAgent {
 
             return await response.json();
         } catch (error) {
-            console.warn(`Jupiter order book API failed, using fallback: ${(error as Error).message}`);
+            this.logger.warn('Jupiter order book API failed, using fallback', { tokenAddress, error: (error as Error).message });
             // Return mock order book data when API fails
             return {
                 bids: [

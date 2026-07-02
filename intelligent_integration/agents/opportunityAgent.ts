@@ -2,15 +2,20 @@
  * Opportunity Agent for Onyx Terminal
  * Analyzes early opportunity potential in newborn tokens
  */
+import { injectable, inject } from 'inversify';
+import type { EarlyOpportunityAnalysis, FlowAnalysis, OnchainAnalysis, MarketAnalysis } from '../types/analysisTypes';
+import type { Logger } from '../core/logger';
+import { TOKENS } from '../core/diTokens';
 
-import { EarlyOpportunityAnalysis, FlowAnalysis, OnchainAnalysis, MarketAnalysis } from '../types/analysisTypes';
-
+@injectable()
 export class OpportunityAgent {
     private cache: Map<string, { data: EarlyOpportunityAnalysis, timestamp: number }>;
     private cacheTTL: number = 300000; // 5 minutes
+    private logger: Logger;
 
-    constructor() {
+    constructor(@inject(TOKENS.Logger) logger: Logger) {
         this.cache = new Map();
+        this.logger = logger;
     }
 
     /**

@@ -17,7 +17,7 @@ const rawKey = CONFIG.SUPABASE_ANON_KEY?.trim();
  * Components should check this before making Supabase calls
  * to avoid network errors from placeholder URLs.
  */
-export const supabaseConfigured = !!(rawUrl && rawKey && rawUrl !== 'https://placeholder-project.supabase.co');
+export const supabaseConfigured = !!(rawUrl && rawKey && !rawUrl.includes('placeholder'));
 
 // Bersihkan URL: hapus trailing slash atau path rest/v1 jika ada
 const cleanUrl = rawUrl

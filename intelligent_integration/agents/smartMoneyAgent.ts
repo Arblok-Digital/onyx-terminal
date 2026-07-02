@@ -2,17 +2,22 @@
  * Smart Money Agent for Onyx Terminal
  * Analyzes the quality of whale activity and identifies smart money
  */
+import { injectable, inject } from 'inversify';
+import type { SmartMoneyAnalysis, OnchainAnalysis, FlowAnalysis } from '../types/analysisTypes';
+import type { Logger } from '../core/logger';
+import { TOKENS } from '../core/diTokens';
 
-import { SmartMoneyAnalysis, OnchainAnalysis, FlowAnalysis } from '../types/analysisTypes';
-
+@injectable()
 export class SmartMoneyAgent {
     private cache: Map<string, { data: SmartMoneyAnalysis, timestamp: number }>;
     private cacheTTL: number = 300000; // 5 minutes
     private smartWhaleDatabase: Map<string, { winRate: number, roiHistory: number, lastActive: number }>;
+    private logger: Logger;
 
-    constructor() {
+    constructor(@inject(TOKENS.Logger) logger: Logger) {
         this.cache = new Map();
         this.smartWhaleDatabase = new Map();
+        this.logger = logger;
         this.initializeSmartWhaleDatabase();
     }
 

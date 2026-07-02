@@ -1,16 +1,17 @@
 [toolchain]
 package_manager = "yarn"
+anchor_version = "1.0.2"
 
 [features]
 resolution = true
 skip-lint = false
 
-[programs.localnet]
-onyx_protocol = "4ERj5qStaTQtvjC8Ae4pbmS4aJ7GNoJA6NUwPgCszNxV"
+[programs.devnet]
+onyx_protocol = "FjMdzw1x2zobB9UD8pcezbmzLwuHQnKMzit68Zbx87PG"
 
 [provider]
-cluster = "localnet"
-wallet = 'C:\Users\ARBLOK\.config\solana\id.json'
+cluster = "devnet"
+wallet = "~/.config/solana/id.json"
 
 [scripts]
 test = "cargo test"

@@ -3,16 +3,25 @@
  * Detects realtime patterns from websocket data streams
  */
 
+import { injectable, inject } from 'inversify';
 import { FlowAnalysis } from '../types/analysisTypes';
 import { WebsocketService } from '../services/websocketService';
+import type { Logger } from '../core/logger';
+import { TOKENS } from '../core/diTokens';
 
+@injectable()
 export class FlowIntelligenceAgent {
     private websocketService: WebsocketService;
+    private logger: Logger;
     private patternDetectors: Map<string, (data: any) => PatternDetection>;
     private minConfidenceThreshold: number = 0.65;
 
-    constructor() {
-        this.websocketService = new WebsocketService();
+    constructor(
+        @inject(TOKENS.Logger) logger: Logger,
+        @inject(TOKENS.WebSocketService) websocketService: WebsocketService
+    ) {
+        this.logger = logger;
+        this.websocketService = websocketService;
         this.patternDetectors = new Map([
             ['buy_pressure', this.detectBuyPressure],
             ['sell_pressure', this.detectSellPressure],

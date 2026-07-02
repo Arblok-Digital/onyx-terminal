@@ -2,15 +2,20 @@
  * Survival Agent for Onyx Terminal
  * Predicts the survival probability and estimated lifespan of newborn tokens
  */
+import { injectable, inject } from 'inversify';
+import type { SurvivalAnalysis, OnchainAnalysis, MarketAnalysis, FlowAnalysis } from '../types/analysisTypes';
+import type { Logger } from '../core/logger';
+import { TOKENS } from '../core/diTokens';
 
-import { SurvivalAnalysis, OnchainAnalysis, MarketAnalysis, FlowAnalysis } from '../types/analysisTypes';
-
+@injectable()
 export class SurvivalAgent {
     private cache: Map<string, { data: SurvivalAnalysis, timestamp: number }>;
     private cacheTTL: number = 3600000; // 1 hour
+    private logger: Logger;
 
-    constructor() {
+    constructor(@inject(TOKENS.Logger) logger: Logger) {
         this.cache = new Map();
+        this.logger = logger;
     }
 
     /**

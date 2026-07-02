@@ -2,16 +2,21 @@
  * Narrative Agent for Onyx Terminal
  * Detects the underlying narrative driving token attention
  */
+import { injectable, inject } from 'inversify';
+import type { NarrativeAnalysis, OnchainAnalysis, MarketAnalysis } from '../types/analysisTypes';
+import type { Logger } from '../core/logger';
+import { TOKENS } from '../core/diTokens';
 
-import { NarrativeAnalysis, OnchainAnalysis, MarketAnalysis } from '../types/analysisTypes';
-
+@injectable()
 export class NarrativeAgent {
     private cache: Map<string, { data: NarrativeAnalysis, timestamp: number }>;
     private cacheTTL: number = 3600000; // 1 hour
     private narrativePatterns: Record<string, { keywords: string[], relatedTokens: string[] }> = {};
+    private logger: Logger;
 
-    constructor() {
+    constructor(@inject(TOKENS.Logger) logger: Logger) {
         this.cache = new Map();
+        this.logger = logger;
         this.initializeNarrativePatterns();
     }
 

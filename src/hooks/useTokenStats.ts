@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { CONFIG } from '@/core/config';
+import { rpcRateLimiter } from '@/utils/rpcRateLimiter';
 
 export interface TokenStats {
   holders: string;
@@ -27,20 +28,21 @@ export function useTokenStats(address?: string) {
           const txns = pair.txns?.h24 || { buys: 0, sells: 0 };
           const volume = pair.volume?.h24 || 0;
 
-          // --- STEP 2: Helius RPC (On-chain Distribution) ---
-          const rpcUrl = `https://mainnet.helius-rpc.com/?api-key=${CONFIG.HELIUS_API_KEY}`;
+          // --- STEP 2: On-chain RPC (Distribution) ---
+          const rpcUrl = CONFIG.SOLANA_RPC;
+          const useHelius = CONFIG.HELIUS_API_KEY && rpcUrl.includes('helius');
+          const fullRpcUrl = useHelius ? `${rpcUrl}?api-key=${CONFIG.HELIUS_API_KEY}` : rpcUrl;
           
+          const rpcFetch = (body: any) =>
+            rpcRateLimiter.fetch(fullRpcUrl, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(body),
+            });
+
           const [supplyRes, largestAccountsRes] = await Promise.all([
-            fetch(rpcUrl, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'getTokenSupply', params: [address] })
-            }),
-            fetch(rpcUrl, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ jsonrpc: '2.0', id: 2, method: 'getTokenLargestAccounts', params: [address] })
-            })
+            rpcFetch({ jsonrpc: '2.0', id: 1, method: 'getTokenSupply', params: [address] }),
+            rpcFetch({ jsonrpc: '2.0', id: 2, method: 'getTokenLargestAccounts', params: [address] }),
           ]);
 
           const supplyData = await supplyRes.json();

@@ -12,12 +12,12 @@ import {
     NarrativeAnalysis,
     SmartMoneyAnalysis,
     SurvivalAnalysis,
-    AgentConfig,
     IntelligenceRanking,
     AttentionVelocityAnalysis,
     ConvictionScoreAnalysis,
     SignalConsensusResult
 } from '../types/analysisTypes';
+import { AgentConfig } from '../types/agentTypes';
 import {
     OPENROUTER_MODELS,
     OPENROUTER_TASK_CONFIG,
@@ -26,7 +26,10 @@ import {
     getOpenRouterApiKey
 } from '../models/openRouterModels';
 import { getOpenRouterProvider } from './openRouterProvider';
-import { getEnv } from '../utils';
+import { getEnv } from '../utils/getEnv';
+import { Logger } from './logger';
+import { injectable, inject } from 'inversify';
+import { TOKENS as TYPES } from './diTokens';
 
 export interface RoutingDecision {
     primaryAgent: string;
@@ -49,13 +52,14 @@ export interface FallbackStatus {
     }>;
 }
 
+@injectable()
 export class AgentRouter extends AgentOrchestrator {
     private agentConfigs: AgentConfig[];
     private fallbackModels: AgentConfig[];
     private currentFallbackStatus: FallbackStatus;
     private signalConsensusEnabled: boolean = true;
 
-    constructor() {
+    constructor(@inject(TYPES.Logger) private logger: Logger) {
         super();
         this.agentConfigs = this.loadAgentConfigs();
         this.fallbackModels = this.loadFallbackConfigs();
@@ -65,22 +69,9 @@ export class AgentRouter extends AgentOrchestrator {
             fallbackReason: '',
             fallbackHistory: []
         };
+        this.logger.info('AgentRouter initialized');
     }
 
-    /**
-     * Utility function to get environment variables in both browser and Node.js environments
-     */
-    private getEnv(key: string, defaultValue: string): string {
-        // Browser environment (Vite)
-        if (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env[key]) {
-            return import.meta.env[key];
-        }
-        // Node.js environment
-        if (typeof process !== 'undefined' && process.env && process.env[key]) {
-            return process.env[key]!;
-        }
-        return defaultValue;
-    }
 
     /**
      * Load agent configurations
@@ -92,8 +83,8 @@ export class AgentRouter extends AgentOrchestrator {
             // === 9Router Gateway (Primary - Free) ===
             {
                 name: '9router-gateway',
-                model: this.getEnv('VITE_AI_MODEL', 'auto'),
-                endpoint: this.getEnv('VITE_AI_GATEWAY_URL', 'http://localhost:20128/v1'),
+                model: getEnv('VITE_AI_MODEL', 'auto'),
+                endpoint: getEnv('VITE_AI_GATEWAY_URL', 'http://localhost:20128/v1'),
                 priority: 1,
                 enabled: true
             },
@@ -101,14 +92,14 @@ export class AgentRouter extends AgentOrchestrator {
             {
                 name: '9router-llama-3.1-70b',
                 model: 'llama-3.1-70b',
-                endpoint: this.getEnv('VITE_9ROUTER_LLAMA_ENDPOINT', 'https://api.9router.ai/v1/llama-3.1-70b'),
+                endpoint: getEnv('VITE_9ROUTER_LLAMA_ENDPOINT', 'https://api.9router.ai/v1/llama-3.1-70b'),
                 priority: 2,
                 enabled: true
             },
             {
                 name: '9router-mistral-large-2',
                 model: 'mistral-large-2',
-                endpoint: this.getEnv('VITE_9ROUTER_MISTRAL_ENDPOINT', 'https://api.9router.ai/v1/mistral-large-2'),
+                endpoint: getEnv('VITE_9ROUTER_MISTRAL_ENDPOINT', 'https://api.9router.ai/v1/mistral-large-2'),
                 priority: 3,
                 enabled: true
             },
@@ -117,7 +108,7 @@ export class AgentRouter extends AgentOrchestrator {
             {
                 name: 'openrouter-deepseek-r1',
                 model: 'deepseek/deepseek-r1:free',
-                endpoint: this.getEnv('VITE_OPENROUTER_ENDPOINT', 'https://openrouter.ai/api/v1/chat/completions'),
+                endpoint: getEnv('VITE_OPENROUTER_ENDPOINT', 'https://openrouter.ai/api/v1/chat/completions'),
                 priority: 4,
                 enabled: isOpenRouterEnabled()
             },
@@ -125,7 +116,7 @@ export class AgentRouter extends AgentOrchestrator {
             {
                 name: 'openrouter-llama-3.3-70b',
                 model: 'meta-llama/llama-3.3-70b-instruct:free',
-                endpoint: this.getEnv('VITE_OPENROUTER_ENDPOINT', 'https://openrouter.ai/api/v1/chat/completions'),
+                endpoint: getEnv('VITE_OPENROUTER_ENDPOINT', 'https://openrouter.ai/api/v1/chat/completions'),
                 priority: 5,
                 enabled: isOpenRouterEnabled()
             },
@@ -133,7 +124,7 @@ export class AgentRouter extends AgentOrchestrator {
             {
                 name: 'openrouter-mistral-7b',
                 model: 'mistralai/mistral-7b-instruct:free',
-                endpoint: this.getEnv('VITE_OPENROUTER_ENDPOINT', 'https://openrouter.ai/api/v1/chat/completions'),
+                endpoint: getEnv('VITE_OPENROUTER_ENDPOINT', 'https://openrouter.ai/api/v1/chat/completions'),
                 priority: 6,
                 enabled: isOpenRouterEnabled()
             },
@@ -141,7 +132,7 @@ export class AgentRouter extends AgentOrchestrator {
             {
                 name: 'openrouter-qwen-2.5-7b',
                 model: 'qwen/qwen-2.5-7b-instruct:free',
-                endpoint: this.getEnv('VITE_OPENROUTER_ENDPOINT', 'https://openrouter.ai/api/v1/chat/completions'),
+                endpoint: getEnv('VITE_OPENROUTER_ENDPOINT', 'https://openrouter.ai/api/v1/chat/completions'),
                 priority: 7,
                 enabled: isOpenRouterEnabled()
             }
@@ -154,7 +145,7 @@ export class AgentRouter extends AgentOrchestrator {
      */
     private loadFallbackConfigs(): AgentConfig[] {
         // In production, this would load from config file
-        const gatewayUrl = this.getEnv('VITE_AI_GATEWAY_URL', 'http://localhost:20128/v1');
+        const gatewayUrl = getEnv('VITE_AI_GATEWAY_URL', 'http://localhost:20128/v1');
 
         return [
             // === 9Router with "arblok" combo (Primary fallback) ===
@@ -169,14 +160,14 @@ export class AgentRouter extends AgentOrchestrator {
             {
                 name: 'huggingface-llama',
                 model: 'llama-3.1-70b',
-                endpoint: this.getEnv('VITE_HF_LLAMA_ENDPOINT', 'https://api-inference.huggingface.co/models/9router/llama-3.1-70b'),
+                endpoint: getEnv('VITE_HF_LLAMA_ENDPOINT') ?? 'https://api-inference.huggingface.co/models/9router/llama-3.1-70b',
                 priority: 2,
                 enabled: true
             },
             {
                 name: 'replicate-mistral',
                 model: 'mistral-large-2',
-                endpoint: this.getEnv('VITE_REPLICATE_MISTRAL_ENDPOINT', 'https://api.replicate.com/v1/predictions'),
+                endpoint: getEnv('VITE_REPLICATE_MISTRAL_ENDPOINT') ?? 'https://api.replicate.com/v1/predictions',
                 priority: 3,
                 enabled: true
             },
@@ -270,7 +261,7 @@ export class AgentRouter extends AgentOrchestrator {
      */
     private async determineRouting(tokenAddress: string): Promise<RoutingDecision> {
         // Priority 1: 9Router Gateway (free, auto-fallback models)
-        const has9RouterKey = !!this.getEnv('VITE_AI_GATEWAY_KEY', '');
+        const has9RouterKey = !!getEnv('VITE_AI_GATEWAY_KEY', '');
         if (has9RouterKey) {
             return {
                 primaryAgent: '9router-gateway',
@@ -340,7 +331,7 @@ export class AgentRouter extends AgentOrchestrator {
                 method: 'GET',
                 headers: {
                     'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${this.getEnv('VITE_9ROUTER_API_KEY', '')}`
+                    'Authorization': `Bearer ${getEnv('VITE_9ROUTER_API_KEY', '')}`
                 },
                 signal: controller.signal
             });
@@ -710,19 +701,19 @@ export class AgentRouter extends AgentOrchestrator {
         switch (agentConfig.name) {
             case '9router-gateway':
             case '9router-arblok':
-                return this.getEnv('VITE_AI_GATEWAY_KEY', 'arblok');
+                return getEnv('VITE_AI_GATEWAY_KEY') ?? 'arblok';
             case '9router-llama-3.1-70b':
             case '9router-mistral-large-2':
-                return this.getEnv('VITE_9ROUTER_API_KEY', '');
+                return getEnv('VITE_9ROUTER_API_KEY') ?? '';
             case 'openrouter-deepseek-r1':
             case 'openrouter-llama-3.3-70b':
             case 'openrouter-mistral-7b':
             case 'openrouter-qwen-2.5-7b':
                 return getOpenRouterApiKey();
             case 'huggingface-llama':
-                return this.getEnv('VITE_HF_API_KEY', '');
+                return getEnv('VITE_HF_API_KEY') ?? '';
             case 'replicate-mistral':
-                return this.getEnv('VITE_REPLICATE_API_KEY', '');
+                return getEnv('VITE_REPLICATE_API_KEY') ?? '';
             default:
                 return '';
         }

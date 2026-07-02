@@ -1,22 +1,43 @@
 /**
- * Type definitions for Onyx Terminal Intelligence Analysis
+ * @file analysisTypes.ts
+ * @layer types
+ * @desc Type definitions for all analysis outputs from AI agents
  */
+
+export interface IntelligenceReport {
+    id: string;
+    timestamp: number;
+    tokenAddress: string;
+    tokenSymbol: string;
+    flowAnalysis: FlowAnalysis;
+    onchainAnalysis: OnchainAnalysis;
+    marketAnalysis: MarketAnalysis;
+    opportunityAnalysis: EarlyOpportunityAnalysis;
+    narrativeAnalysis: NarrativeAnalysis;
+    smartMoneyAnalysis: SmartMoneyAnalysis;
+    survivalAnalysis: SurvivalAnalysis;
+    summary: string;
+    recommendations: string[];
+}
 
 export interface FlowAnalysis {
     token: string;
-    patterns: Array<{
-        type: string;
-        strength: number;
-        evidence: string[];
-    }>;
-    confidence: number;
-    evidence: string[];
-    realtimeData?: {
-        buyPressure: number;
-        sellPressure: number;
-        volumeGrowth: number;
-        whaleActivity: number;
+    inflow: number;
+    outflow: number;
+    netFlow: number;
+    majorInflows: { source: string; amount: number; timestamp: number }[];
+    majorOutflows: { destination: string; amount: number; timestamp: number }[];
+    exchangeFlow: {
+        inflowToExchanges: number;
+        outflowFromExchanges: number;
+        netExchangeFlow: number;
     };
+    anomalousTransactions: {
+        signature: string;
+        type: string;
+        amount: number;
+        confidence: number;
+    }[];
 }
 
 export interface OnchainAnalysis {
@@ -49,7 +70,7 @@ export interface OnchainAnalysis {
         overallRugScore: number;
     };
     riskScore: number;
-    contractAnalysis?: {
+    contractAnalysis: {
         age: number;
         creator: string;
         mintAuthority: boolean;
@@ -78,188 +99,211 @@ export interface MarketAnalysis {
         change24h?: number;
     };
     volatilityScore: number;
-    marketCap?: number;
-    sentimentAnalysis?: {
+    marketCap: number;
+    sentimentAnalysis: {
         sentimentScore: number;
         positiveMentions: number;
         negativeMentions: number;
         neutralMentions: number;
         sentimentTrend: number;
-        source: 'twitter' | 'telegram' | 'reddit' | 'n/a';
+        source: string;
     };
 }
 
 export interface EarlyOpportunityAnalysis {
     token: string;
-    eoiScore: number; // Early Opportunity Index (0-100)
-    rating: 'LOW OPPORTUNITY' | 'MODERATE OPPORTUNITY' | 'HIGH OPPORTUNITY' | 'EXTREME OPPORTUNITY';
-    factors: {
-        volumeVelocity: number;
-        freshWalletGrowth: number;
-        whaleEntry: number;
-        liquidityGrowth: number;
-        buyPressure: number;
-        marketMomentum: number;
+    opportunityScore: number;
+    entryStrategy: {
+        suggestedEntryPrice: number;
+        entryConfidence: number;
+        entryTiming: string;
     };
-    evidence: string[];
-    confidence: number;
+    exitStrategy: {
+        suggestedExitPrice: number;
+        takeProfitLevels: { level: number; weight: number }[];
+        stopLoss: number;
+    };
+    riskRewardRatio: number;
+    predictedPotential: {
+        shortTerm: number;
+        midTerm: number;
+        longTerm: number;
+    };
+    discoveryTimestamp: number;
+    validationMetrics: {
+        liquidityCheck: boolean;
+        holderDistribution: 'healthy' | 'concentrated' | 'risky';
+        contractSafety: 'safe' | 'verified' | 'unknown' | 'risky';
+        socialVolume: number;
+    };
+    competitionAnalysis: {
+        marketShare: number;
+        comparableProjects: string[];
+        uniqueAdvantages: string[];
+    };
 }
 
 export interface NarrativeAnalysis {
     token: string;
-    narrative: string; // e.g., "AI Infrastructure", "Meme", "DePIN", "RWA", "Gaming", "SocialFi"
-    confidence: number;
-    evidence: string[];
-    narrativeStrength: number; // 0-100
-    relatedTokens?: string[];
+    narrativeScore: number;
+    trendingTopics: {
+        topic: string;
+        mentionCount: number;
+        sentiment: number;
+        momentum: number;
+    }[];
+    communitySentiment: {
+        overall: number;
+        breakdown: {
+            twitter: number;
+            discord: number;
+            telegram: number;
+        };
+    };
+    influencerActivity: {
+        totalInfluencers: number;
+        positiveMentions: number;
+        negativeMentions: number;
+        topInfluencers: {
+            handle: string;
+            followers: number;
+            sentiment: number;
+            reach: number;
+        }[];
+    };
+    brandHealth: {
+        awareness: number;
+        trustLevel: number;
+        communityEngagement: number;
+    };
+    competitivePositioning: {
+        marketSegment: string;
+        uniqueSellingPoints: string[];
+        threatLevel: number;
+        competitorMentions: { competitor: string; mentionCount: number }[];
+    };
 }
 
 export interface SmartMoneyAnalysis {
     token: string;
-    smartMoneyScore: number; // 0-100
-    smartWhales: {
+    smartMoneyScore: number;
+    trackedWallets: {
         address: string;
-        winRate: number;
-        roiHistory: number;
-        entryQuality: number;
+        label: string;
+        totalInvested: number;
+        currentPosition: number;
+        profitLoss: number;
+        entryPrice: number;
+        confidence: number;
     }[];
-    totalSmartMoneyVolume: number;
-    smartMoneyPercentage: number;
-    confidence: number;
+    capitalFlows: {
+        inflow24h: number;
+        outflow24h: number;
+        netFlow: number;
+        significantTransactions: {
+            wallet: string;
+            type: 'buy' | 'sell';
+            amount: number;
+            price: number;
+            timestamp: number;
+        }[];
+    };
+    accumulationPattern: {
+        isAccumulating: boolean;
+        accumulationRate: number;
+        averageEntryPrice: number;
+        smartMoneyConfidence: number;
+    };
+    correlationAnalysis: {
+        correlatedTokens: { token: string; correlation: number }[];
+        marketCorrelation: number;
+    };
 }
 
 export interface SurvivalAnalysis {
     token: string;
-    survivalProbability: number; // 0-1
-    estimatedLifespan: string; // e.g., "1-3 days", "3-7 days", "1-4 weeks", "1+ months"
-    factors: {
-        liquidityRetention: number;
-        holderGrowth: number;
-        buySellRatio: number;
-        whaleBehavior: number;
-        developerActivity: number;
+    survivalScore: number;
+    liquidityHealth: {
+        ratio: number;
+        depth: number;
+        volatility: number;
+        sustainability: 'high' | 'medium' | 'low' | 'critical';
     };
-    confidence: number;
-}
-
-export interface IntelligenceRanking {
-    opportunityScore: number; // 0-100
-    riskScore: number; // 0-100
-    smartMoneyScore: number; // 0-100
-    survivalScore: number; // 0-100
-    narrativeScore: number; // 0-100
-    overallScore: number; // 0-100
-    rating: 'AVOID' | 'CAUTION' | 'MONITOR' | 'WATCH' | 'POTENTIAL' | 'OPPORTUNITY' | 'STRONG OPPORTUNITY';
-}
-
-export interface IntelligenceReport {
-    rawResponse: string;
-    executiveSummary: string;
-    keyInsights: Array<{
-        insight: string;
+    holderRetention: {
+        retentionRate: number;
+        averageHoldingPeriod: number;
+        churnRate: number;
+    };
+    marketResilience: {
+        priceStability: number;
+        recoveryRate: number;
+        crashResistance: number;
+    };
+    riskMetrics: {
+        impermanentLossRisk: number;
+        liquidationRisk: number;
+        regulatoryRisk: number;
+        overallRisk: 'low' | 'medium' | 'high' | 'critical';
+    };
+    sustainabilityIndicators: {
+        revenueModel: string;
+        tokenEmissionRate: number;
+        stakingParticipation: number;
+        treasuryHealth: number;
+    };
+    timelineForecast: {
+        shortTerm: 'bullish' | 'neutral' | 'bearish';
+        midTerm: 'bullish' | 'neutral' | 'bearish';
+        longTerm: 'bullish' | 'neutral' | 'bearish';
         confidence: number;
-        category?: 'flow' | 'onchain' | 'market' | 'sentiment' | 'risk' | 'opportunity' | 'narrative' | 'smart-money' | 'survival' | 'system';
-    }>;
-    riskAssessment: Record<string, string>;
-    opportunityAssessment: Record<string, string>;
-    patternDetection: string;
-    rugPullIndicators?: {
-        dumpScore: number;
-        liquidityRemovalScore: number;
-        devWalletActivityScore: number;
-        overallRugScore: number;
-        warningLevel: 'low' | 'medium' | 'high' | 'critical';
-    };
-    sentimentAnalysis?: {
-        sentimentScore: number;
-        positiveMentions: number;
-        negativeMentions: number;
-        neutralMentions: number;
-        sentimentTrend: number;
-        source: 'twitter' | 'telegram' | 'reddit' | 'n/a';
-    };
-    earlyOpportunityAnalysis?: EarlyOpportunityAnalysis;
-    narrativeAnalysis?: NarrativeAnalysis;
-    smartMoneyAnalysis?: SmartMoneyAnalysis;
-    survivalAnalysis?: SurvivalAnalysis;
-    intelligenceRanking?: IntelligenceRanking;
-    attentionVelocityAnalysis?: AttentionVelocityAnalysis;
-    convictionScoreAnalysis?: ConvictionScoreAnalysis;
-    signalConsensus?: SignalConsensusResult;
-    recommendation: string;
-    confidenceScore: number;
-    metadata?: {
-        token: string;
-        timestamp: string;
-        dataSources: string[];
-        routingDecision?: {
-            modelUsed: string;
-            isFallback: boolean;
-            confidence: number;
-        };
-        analysisVersion?: string;
-        featuresUsed?: string[];
-        errorDetails?: {
-            message: string;
-            stack: string;
-            timestamp: string;
-        };
     };
 }
 
-// Import interfaces from AgentRouter (these would normally be in separate files)
+// Ranking & Scoring Types
+export interface IntelligenceRanking {
+    overallScore: number;
+    riskScore: number;
+    opportunityScore: number;
+    convictionScore: number;
+    rank: number;
+    outOf: number;
+    percentile: number;
+    category: 'low_risk' | 'medium_risk' | 'high_risk' | 'speculative';
+}
+
 export interface AttentionVelocityAnalysis {
     token: string;
-    attentionVelocity: number; // 0-100
-    velocityTrend: 'INCREASING' | 'STABLE' | 'DECREASING';
-    timeWindow: number; // in minutes
-    evidence: {
-        socialMediaMentions: number;
-        tradingVolumeGrowth: number;
-        walletGrowthRate: number;
-        priceMomentum: number;
+    velocity: number;
+    trend: 'accelerating' | 'stable' | 'decelerating';
+    sources: {
+        twitter: number;
+        discord: number;
+        telegram: number;
     };
-    confidence: number;
+    velocityChange24h: number;
+    attentionScore: number;
 }
 
 export interface ConvictionScoreAnalysis {
     token: string;
-    convictionScore: number; // 0-100
-    convictionTrend: 'INCREASING' | 'STABLE' | 'DECREASING';
-    smartMoneyConviction: number;
-    retailConviction: number;
-    evidence: {
-        smartMoneyHoldings: number;
-        smartMoneyEntryPoints: number;
-        retailFomoIndicator: number;
-        liquidityLockStatus: boolean;
+    convictionScore: number;
+    factors: {
+        technicalStrength: number;
+        communityStrength: number;
+        marketMomentum: number;
+        teamCredibility: number;
     };
-    confidence: number;
+    convictionLevel: 'low' | 'medium' | 'high' | 'very_high';
 }
 
 export interface SignalConsensusResult {
     token: string;
-    consensusScore: number; // 0-100
-    conflictingSignals: Array<{
-        agent: string;
-        signal: string;
-        confidence: number;
-        resolution: string;
-    }>;
-    resolvedSignals: Array<{
-        agent: string;
-        signal: string;
-        confidence: number;
-        weight: number;
-    }>;
-    finalDecision: string;
-    confidence: number;
-}
-
-export interface AgentConfig {
-    name: string;
-    model: string;
-    endpoint: string;
-    priority: number;
-    enabled: boolean;
+    consensusScore: number;
+    signals: {
+        onchain: { score: number; weight: number };
+        market: { score: number; weight: number };
+        social: { score: number; weight: number };
+        smartMoney: { score: number; weight: number };
+    };
+    consensus: 'strong_buy' | 'buy' | 'neutral' | 'sell' | 'strong_sell';
 }

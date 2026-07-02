@@ -107,6 +107,8 @@ const DEFAULT_RULES: ConfigRule[] = [
 /**
  * Validates runtime configuration and environment variables.
  */
+import { getEnv } from '../utils/getEnv';
+
 export class ConfigValidator {
     private rules: ConfigRule[];
 
@@ -176,27 +178,7 @@ export class ConfigValidator {
      * Works in both Vite (browser with import.meta.env) and Node.js (process.env).
      */
     private getEnv(key: string): string | undefined {
-        try {
-            // Vite environment (browser) — accessed via dynamic property to avoid TS errors
-            const globalAny = globalThis as Record<string, unknown>;
-            const viteImportMeta = (globalAny as { import?: { meta?: Record<string, string> } }).import;
-            if (viteImportMeta?.meta) {
-                const val = viteImportMeta.meta[key];
-                if (val !== undefined) return val;
-            }
-
-            // Node.js environment
-            const proc = globalAny.process as { env?: Record<string, string | undefined> } | undefined;
-            if (proc?.env) {
-                const val = proc.env[key];
-                if (val !== undefined) return val;
-            }
-
-            return undefined;
-        } catch {
-            // Silently fail — environment might not support any of these
-            return undefined;
-        }
+        return getEnv(key);
     }
 }
 

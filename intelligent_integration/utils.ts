@@ -3,14 +3,15 @@
  * @desc Utility functions for 9Router Intelligence
  */
 
-export function getEnv(key: string, defaultValue: string = ''): string {
-    // Browser environment (Vite)
-    if (typeof import.meta !== 'undefined' && import.meta.env) {
-        return import.meta.env[key] || defaultValue;
-    }
-    // Node.js environment
-    if (typeof process !== 'undefined' && process.env) {
-        return process.env[key] || defaultValue;
-    }
-    return defaultValue;
+import { getEnv } from './utils/getEnv';
+
+/**
+ * Warn a message with optional context.
+ * @param message The message to warn.
+ * @param context Optional context to include.
+ */
+export function warn(message: string, context?: Record<string, unknown>): void {
+    console.warn(JSON.stringify({ timestamp: new Date().toISOString(), level: 'WARN', message, context }, null, 2));
 }
+
+export { getEnv };

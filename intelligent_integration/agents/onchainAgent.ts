@@ -3,33 +3,25 @@
  * Analyzes blockchain data from Helius and Birdeye
  */
 
-import { OnchainAnalysis } from '../types/analysisTypes';
+import { injectable, inject } from 'inversify';
+import type { OnchainAnalysis } from '../types/analysisTypes';
 import { MultiRPCService } from '../services/rpcService';
+import type { Logger } from '../core/logger';
+import { TOKENS } from '../core/diTokens';
+import { getEnv } from '../utils/getEnv';
 
+@injectable()
 export class OnchainAgent {
     private rpcService: MultiRPCService;
     private heliusApiKey: string;
     private birdeyeApiKey: string;
+    private logger: Logger;
 
-    /**
-     * Get environment variable in a cross-environment way
-     */
-    private getEnv(key: string, defaultValue: string = ''): string {
-        // Browser environment (Vite)
-        if (typeof import.meta !== 'undefined' && import.meta.env) {
-            return import.meta.env[key] || defaultValue;
-        }
-        // Node.js environment
-        if (typeof process !== 'undefined' && process.env) {
-            return process.env[key] || defaultValue;
-        }
-        return defaultValue;
-    }
-
-    constructor() {
+    constructor(@inject(TOKENS.Logger) logger: Logger) {
         this.rpcService = new MultiRPCService();
-        this.heliusApiKey = this.getEnv('VITE_HELIUS_API_KEY');
-        this.birdeyeApiKey = this.getEnv('VITE_BIRDEYE_API_KEY');
+        this.heliusApiKey = getEnv('VITE_HELIUS_API_KEY', '');
+        this.birdeyeApiKey = getEnv('VITE_BIRDEYE_API_KEY', '');
+        this.logger = logger;
     }
 
     /**
@@ -46,7 +38,7 @@ export class OnchainAgent {
 
             return this.createOnchainAnalysis(tokenAddress, transfers, holders, liquidity, contractInfo);
         } catch (error) {
-            console.error('Error analyzing token:', error);
+            this.logger.error('Error analyzing token', error as Error, { tokenAddress });
             return this.createFallbackAnalysis(tokenAddress);
         }
     }
@@ -55,7 +47,7 @@ export class OnchainAgent {
      * Get token transfers from Helius
      */
     private async getTokenTransfers(tokenAddress: string): Promise<any> {
-        console.warn('Helius token transfers API is currently disabled. Returning empty data.');
+        this.logger.warn('Helius token transfers API is currently disabled. Returning empty data.', { tokenAddress });
         return { transfers: [], totalSupply: 0 };
     }
 
@@ -63,7 +55,7 @@ export class OnchainAgent {
      * Get token holders from Helius
      */
     private async getTokenHolders(tokenAddress: string): Promise<any> {
-        console.warn('Helius token holders API is currently disabled. Returning empty data.');
+        this.logger.warn('Helius token holders API is currently disabled. Returning empty data.', { tokenAddress });
         return { holders: [], totalSupply: 0 };
     }
 
@@ -72,7 +64,7 @@ export class OnchainAgent {
      */
     private async getTokenLiquidity(tokenAddress: string): Promise<any> {
         if (!this.birdeyeApiKey) {
-            console.warn('Birdeye API key not provided. Skipping Birdeye liquidity data.');
+            this.logger.warn('Birdeye API key not provided. Skipping Birdeye liquidity data.');
             return { liquidity: 0, liquidityChange24h: 0 }; // Default / empty data
         }
 
@@ -84,19 +76,19 @@ export class OnchainAgent {
             });
 
             if (!response.ok) {
-                console.error(`Birdeye API error: ${response.statusText}`);
+                this.logger.error('Birdeye API error', new Error(response.statusText), { tokenAddress, status: response.status });
                 return { liquidity: 0, liquidityChange24h: 0 };
             }
 
             const data = await response.json();
             const tokenData = data.data.tokens.find((token: any) => token.address === tokenAddress);
             if (!tokenData) {
-                console.warn(`Birdeye API: Token data not found for ${tokenAddress}`);
+                this.logger.warn('Birdeye API: Token data not found', { tokenAddress });
                 return { liquidity: 0, liquidityChange24h: 0 };
             }
             return tokenData;
         } catch (error) {
-            console.error(`Birdeye token liquidity API failed: ${(error as Error).message}`);
+            this.logger.error('Birdeye token liquidity API failed', error as Error, { tokenAddress });
             return { liquidity: 0, liquidityChange24h: 0 }; // Default / empty data on error
         }
     }
@@ -108,7 +100,7 @@ export class OnchainAgent {
         try {
             const rpcResponse = await this.rpcService.getAccountInfo(tokenAddress);
             if (!rpcResponse || !rpcResponse.value) {
-                console.warn(`RPC Service: No account info found for ${tokenAddress}`);
+                this.logger.warn('RPC Service: No account info found', { tokenAddress });
                 return this.createDefaultContractInfo();
             }
             const accountData = rpcResponse.value.data?.parsed?.info || {};
@@ -122,7 +114,7 @@ export class OnchainAgent {
                 creationTimestamp: undefined
             };
         } catch (error) {
-            console.warn(`RPC getAccountInfo failed for ${tokenAddress}, using defaults:`, (error as Error).message);
+            this.logger.warn('RPC getAccountInfo failed, using defaults', { tokenAddress, error: (error as Error).message });
             return this.createDefaultContractInfo();
         }
     }

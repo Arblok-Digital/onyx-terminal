@@ -5,6 +5,7 @@
  */
 
 import { ResearchManager } from './researchManager';
+import { AnalysisAggregator } from './core/analysisAggregator';
 import type {
     FlowAnalysis,
     OnchainAnalysis,
@@ -17,9 +18,9 @@ import type {
     IntelligenceReport,
     AttentionVelocityAnalysis,
     ConvictionScoreAnalysis,
-    SignalConsensusResult,
-    AgentConfig
+    SignalConsensusResult
 } from './types/analysisTypes';
+import { AgentConfig } from './types/agentTypes';
 // Singleton orchestrator pattern
 let orchestrator: ResearchManager | null = null;
 
@@ -39,23 +40,47 @@ export function hasRealApiKeys(): boolean {
 }
 
 /**
+ * Generate default/mock analysis data from a token address
+ */
+function createDefaultFlowAnalysis(token: string): FlowAnalysis {
+    return AnalysisAggregator.generateMockFlowAnalysis({ token });
+}
+
+function createDefaultOnchainAnalysis(token: string): OnchainAnalysis {
+    return AnalysisAggregator.generateMockOnchainAnalysis({ token });
+}
+
+function createDefaultMarketAnalysis(token: string): MarketAnalysis {
+    return AnalysisAggregator.generateMockMarketAnalysis({ token });
+}
+
+/**
  * Main entry point for token analysis
+ * Can be called with just a token address (generates default analysis data internally)
+ * or with full analysis data objects for richer reporting.
  */
 export async function analyzeToken(
     token: string,
-    flowData: FlowAnalysis,
-    onchainData: OnchainAnalysis,
-    marketData: MarketAnalysis,
+    flowData?: FlowAnalysis,
+    onchainData?: OnchainAnalysis,
+    marketData?: MarketAnalysis,
     opportunityData?: EarlyOpportunityAnalysis,
     narrativeData?: NarrativeAnalysis,
     smartMoneyData?: SmartMoneyAnalysis,
     survivalData?: SurvivalAnalysis
 ): Promise<IntelligenceReport> {
     const orchestrator = getOrchestrator();
+
+    // If only token address provided, generate default/mock analysis objects
+    // to prevent "Cannot read properties of undefined" errors
+    const flow = flowData || createDefaultFlowAnalysis(token);
+    const onchain = onchainData || createDefaultOnchainAnalysis(token);
+    const market = marketData || createDefaultMarketAnalysis(token);
+
     return orchestrator.generateIntelligenceReport(
-        flowData,
-        onchainData,
-        marketData,
+        flow,
+        onchain,
+        market,
         opportunityData,
         narrativeData,
         smartMoneyData,
@@ -91,6 +116,6 @@ export type {
     IntelligenceReport,
     AttentionVelocityAnalysis,
     ConvictionScoreAnalysis,
-    SignalConsensusResult,
-    AgentConfig
+    SignalConsensusResult
 };
+export type { AgentConfig };

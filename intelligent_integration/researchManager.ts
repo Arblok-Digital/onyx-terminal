@@ -19,9 +19,9 @@ import type {
     SmartMoneyAnalysis,
     SurvivalAnalysis,
     IntelligenceRanking,
-    IntelligenceReport,
-    AgentConfig
+    IntelligenceReport
 } from './types/analysisTypes';
+import type { AgentConfig } from './types/agentTypes';
 
 export class ResearchManager {
     private endpoints: Map<string, string>;

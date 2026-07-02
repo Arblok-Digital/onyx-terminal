@@ -20,6 +20,7 @@ export const TOKENS = {
     RpcService: 'services.RpcService',
     WebSocketService: 'services.WebSocketService',
     OpenRouterService: 'services.OpenRouterService',
+    OpenRouterQueryManager: 'services.OpenRouterQueryManager',
     ArkhamIntelligenceService: 'services.ArkhamIntelligenceService',
 
     // ── Managers ─────────────────────────────────────────────
@@ -37,7 +38,7 @@ export const TOKENS = {
     SurvivalAgent: 'agents.SurvivalAgent',
 
     // ── Utilities ────────────────────────────────────────────
-    PromptBuilders: 'utils.PromptBuilders',
+    PromptBuilder: 'utils.PromptBuilder',
     ReportParser: 'utils.ReportParser',
 
     // ── Infrastructure ───────────────────────────────────────
