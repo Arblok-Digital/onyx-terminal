@@ -21,9 +21,8 @@ import { ArkhamIntelligenceService } from '../services/arkhamIntelligenceService
 import { WebsocketService } from '../services/websocketService';
 
 // ── Managers ────────────────────────────────────────────────────────────
-import { AgentRouter } from './agentRouter';
-import { ResearchManager } from '../researchManager';
 import { AgentOrchestrator } from '../agentOrchestrator';
+import { AgentRouter } from './agentRouter';
 
 // ── Agents ──────────────────────────────────────────────────────────────
 import { MarketAgent } from '../agents/marketAgent';
@@ -55,9 +54,8 @@ container.bind<ArkhamIntelligenceService>(TOKENS.ArkhamIntelligenceService).to(A
 container.bind<WebsocketService>(TOKENS.WebSocketService).to(WebsocketService);
 
 // ── Managers ────────────────────────────────────────────────────────────
-container.bind<AgentRouter>(TOKENS.AgentRouter).to(AgentRouter);
-container.bind<ResearchManager>(TOKENS.ResearchManager).to(ResearchManager);
 container.bind<AgentOrchestrator>(TOKENS.AgentOrchestrator).to(AgentOrchestrator);
+container.bind<AgentRouter>(TOKENS.AgentRouter).to(AgentRouter);
 
 // ── Agents ──────────────────────────────────────────────────────────────
 container.bind<MarketAgent>(TOKENS.MarketAgent).to(MarketAgent);

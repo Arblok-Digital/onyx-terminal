@@ -4,8 +4,13 @@
  */
 
 import { injectable } from 'inversify';
-import { container } from './core/inversify.config';
 import { TOKENS } from './core/diTokens';
+
+// Lazy container getter to avoid circular dependency
+const getContainer = () => {
+    const { container } = require('./core/inversify.config');
+    return container;
+};
 import { FlowIntelligenceAgent } from './agents/flowIntelligenceAgent';
 import { OnchainAgent } from './agents/onchainAgent';
 import { MarketAgent } from './agents/marketAgent';
@@ -53,56 +58,56 @@ export class AgentOrchestrator {
     // Lazy getters - resolve agents only when accessed
     protected get flowAgent(): FlowIntelligenceAgent {
         if (!this._flowAgent) {
-            this._flowAgent = container.get<FlowIntelligenceAgent>(TOKENS.FlowIntelligenceAgent);
+            this._flowAgent = getContainer().get<FlowIntelligenceAgent>(TOKENS.FlowIntelligenceAgent);
         }
         return this._flowAgent;
     }
 
     protected get onchainAgent(): OnchainAgent {
         if (!this._onchainAgent) {
-            this._onchainAgent = container.get<OnchainAgent>(TOKENS.OnchainAgent);
+            this._onchainAgent = getContainer().get<OnchainAgent>(TOKENS.OnchainAgent);
         }
         return this._onchainAgent;
     }
 
     protected get marketAgent(): MarketAgent {
         if (!this._marketAgent) {
-            this._marketAgent = container.get<MarketAgent>(TOKENS.MarketAgent);
+            this._marketAgent = getContainer().get<MarketAgent>(TOKENS.MarketAgent);
         }
         return this._marketAgent;
     }
 
     protected get opportunityAgent(): OpportunityAgent {
         if (!this._opportunityAgent) {
-            this._opportunityAgent = container.get<OpportunityAgent>(TOKENS.OpportunityAgent);
+            this._opportunityAgent = getContainer().get<OpportunityAgent>(TOKENS.OpportunityAgent);
         }
         return this._opportunityAgent;
     }
 
     protected get narrativeAgent(): NarrativeAgent {
         if (!this._narrativeAgent) {
-            this._narrativeAgent = container.get<NarrativeAgent>(TOKENS.NarrativeAgent);
+            this._narrativeAgent = getContainer().get<NarrativeAgent>(TOKENS.NarrativeAgent);
         }
         return this._narrativeAgent;
     }
 
     protected get smartMoneyAgent(): SmartMoneyAgent {
         if (!this._smartMoneyAgent) {
-            this._smartMoneyAgent = container.get<SmartMoneyAgent>(TOKENS.SmartMoneyAgent);
+            this._smartMoneyAgent = getContainer().get<SmartMoneyAgent>(TOKENS.SmartMoneyAgent);
         }
         return this._smartMoneyAgent;
     }
 
     protected get survivalAgent(): SurvivalAgent {
         if (!this._survivalAgent) {
-            this._survivalAgent = container.get<SurvivalAgent>(TOKENS.SurvivalAgent);
+            this._survivalAgent = getContainer().get<SurvivalAgent>(TOKENS.SurvivalAgent);
         }
         return this._survivalAgent;
     }
 
     protected get researchManager(): OpenRouterResearchManager {
         if (!this._researchManager) {
-            this._researchManager = container.get<OpenRouterResearchManager>(TOKENS.OpenRouterService);
+            this._researchManager = getContainer().get<OpenRouterResearchManager>(TOKENS.OpenRouterService);
         }
         return this._researchManager;
     }

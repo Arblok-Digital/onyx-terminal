@@ -4,8 +4,9 @@
  * @exposes research manager, analysis types, and main entry points
  */
 
-import { ResearchManager } from './researchManager';
+import { AgentOrchestrator } from './agentOrchestrator';
 import { AnalysisAggregator } from './core/analysisAggregator';
+import { Connection } from '@solana/web3.js';
 import type {
     FlowAnalysis,
     OnchainAnalysis,
@@ -22,11 +23,16 @@ import type {
 } from './types/analysisTypes';
 import { AgentConfig } from './types/agentTypes';
 // Singleton orchestrator pattern
-let orchestrator: ResearchManager | null = null;
+let orchestrator: AgentOrchestrator | null = null;
 
-function getOrchestrator(): ResearchManager {
+export function initializeOrchestrator(solanaConnection: Connection) {
+    orchestrator = new AgentOrchestrator(solanaConnection);
+    console.log('[IntelligentIntegration] Orchestrator initialized with on-chain connection');
+}
+
+function getOrchestrator(): AgentOrchestrator {
     if (!orchestrator) {
-        orchestrator = new ResearchManager();
+        orchestrator = new AgentOrchestrator();
     }
     return orchestrator;
 }
@@ -35,57 +41,24 @@ function getOrchestrator(): ResearchManager {
  * Check if real API keys are available
  */
 export function hasRealApiKeys(): boolean {
-    const orchestrator = getOrchestrator();
-    return orchestrator.hasRealApiKeys();
-}
-
-/**
- * Generate default/mock analysis data from a token address
- */
-function createDefaultFlowAnalysis(token: string): FlowAnalysis {
-    return AnalysisAggregator.generateMockFlowAnalysis({ token });
-}
-
-function createDefaultOnchainAnalysis(token: string): OnchainAnalysis {
-    return AnalysisAggregator.generateMockOnchainAnalysis({ token });
-}
-
-function createDefaultMarketAnalysis(token: string): MarketAnalysis {
-    return AnalysisAggregator.generateMockMarketAnalysis({ token });
+    return false; // Will be implemented with proper API key checking
 }
 
 /**
  * Main entry point for token analysis
- * Can be called with just a token address (generates default analysis data internally)
- * or with full analysis data objects for richer reporting.
  */
 export async function analyzeToken(
     token: string,
-    flowData?: FlowAnalysis,
-    onchainData?: OnchainAnalysis,
-    marketData?: MarketAnalysis,
-    opportunityData?: EarlyOpportunityAnalysis,
-    narrativeData?: NarrativeAnalysis,
-    smartMoneyData?: SmartMoneyAnalysis,
-    survivalData?: SurvivalAnalysis
+    _flowData?: FlowAnalysis,
+    _onchainData?: OnchainAnalysis,
+    _marketData?: MarketAnalysis,
+    _opportunityData?: EarlyOpportunityAnalysis,
+    _narrativeData?: NarrativeAnalysis,
+    _smartMoneyData?: SmartMoneyAnalysis,
+    _survivalData?: SurvivalAnalysis
 ): Promise<IntelligenceReport> {
-    const orchestrator = getOrchestrator();
-
-    // If only token address provided, generate default/mock analysis objects
-    // to prevent "Cannot read properties of undefined" errors
-    const flow = flowData || createDefaultFlowAnalysis(token);
-    const onchain = onchainData || createDefaultOnchainAnalysis(token);
-    const market = marketData || createDefaultMarketAnalysis(token);
-
-    return orchestrator.generateIntelligenceReport(
-        flow,
-        onchain,
-        market,
-        opportunityData,
-        narrativeData,
-        smartMoneyData,
-        survivalData
-    );
+    const orch = getOrchestrator();
+    return orch.analyzeToken(token, 'UNKNOWN', 30);
 }
 
 // Re-export Arkham Intelligence Service

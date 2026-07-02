@@ -1,8 +1,8 @@
 # ONYX TERMINAL — TASK PLAN & PRIORITAS
 
-> **Last Updated:** 7/2/2026 12:11 WIB  
-> **Project Status:** 75% Complete — Devnet Deployed & Tested, Frontend Integration In Progress  
-> **Critical Blocker:** ~~Smart Contract belum di-deploy~~ RESOLVED ✅
+> **Last Updated:** 7/2/2026 15:57 WIB  
+> **Project Status:** 78% Complete — Blockchain Operational, AI Agents Need Debugging  
+> **Critical Blocker:** AI Agent Runtime Errors 🔴
 
 ---
 
@@ -12,11 +12,11 @@
 - ✅ **Smart Contract Code:** Complete (85% maturity)
 - ✅ **Smart Contract Deployment:** DEPLOYED on Devnet ✅ (100%)
 - ✅ **Frontend Architecture:** Complete (90% maturity)
-- ⚠️ **On-chain Integration:** Partial (60% — deployed, frontend bug fixed, UI test pending)
-- ✅ **AI Agents System:** Complete (95% — production ready)
-- ✅ **Error Handling:** Good (80%)
-- ⚠️ **Documentation:** Partial (60%)
-- ❌ **Testing:** Incomplete (20% — critical gap)
+- ✅ **On-chain Integration:** Complete (100% — deployed, tested, verified)
+- 🔴 **AI Agents System:** Broken (40% — runtime errors, needs debugging)
+- ⚠️ **Error Handling:** Good (80%)
+- ⚠️ **Documentation:** Partial (70%)
+- ⚠️ **Testing:** Partial (50% — blockchain tests pass, agent tests needed)
 
 ### Network Configuration
 - **Current Config:** Devnet (Anchor.toml) ✅

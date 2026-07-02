@@ -1,12 +1,13 @@
 import { createRoot } from "react-dom/client";
 import { registerSW } from 'virtual:pwa-register';
-import React, { useMemo } from 'react';
-import { ConnectionProvider, WalletProvider } from '@solana/wallet-adapter-react';
+import React, { useMemo, useEffect } from 'react';
+import { ConnectionProvider, WalletProvider, useConnection } from '@solana/wallet-adapter-react';
 import { WalletModalProvider } from '@solana/wallet-adapter-react-ui';
 import App from "./App";
 import "./index.css";
 import { CONFIG } from "./core/config";
 import { configValidator } from "../intelligent_integration/core/configValidator";
+import { initializeOrchestrator } from "../intelligent_integration";
 
 // Import CSS untuk Wallet Adapter UI
 import '@solana/wallet-adapter-react-ui/styles.css';
@@ -42,6 +43,23 @@ const FatalErrorScreen = ({ errors }: { errors: string[] }) => (
 );
 
 
+const OrchestratorInit = ({ children }: { children: React.ReactNode }) => {
+  const { connection } = useConnection();
+  
+  useEffect(() => {
+    if (connection) {
+      try {
+        initializeOrchestrator(connection);
+        console.log('[main] AgentOrchestrator initialized with connection');
+      } catch (err) {
+        console.error('[main] Failed to initialize orchestrator:', err);
+      }
+    }
+  }, [connection]);
+
+  return <>{children}</>;
+};
+
 const Root = () => {
   const endpoint = useMemo(() => CONFIG.SOLANA_RPC, []);
   const wallets = useMemo(() => [], []);
@@ -50,7 +68,9 @@ const Root = () => {
     <ConnectionProvider endpoint={endpoint}>
       <WalletProvider wallets={wallets} autoConnect>
         <WalletModalProvider>
-          <App />
+          <OrchestratorInit>
+            <App />
+          </OrchestratorInit>
         </WalletModalProvider>
       </WalletProvider>
     </ConnectionProvider>

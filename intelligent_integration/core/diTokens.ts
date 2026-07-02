@@ -25,7 +25,6 @@ export const TOKENS = {
 
     // ── Managers ─────────────────────────────────────────────
     AgentOrchestrator: 'managers.AgentOrchestrator',
-    ResearchManager: 'managers.ResearchManager',
     AgentRouter: 'managers.AgentRouter',
 
     // ── Agents ───────────────────────────────────────────────

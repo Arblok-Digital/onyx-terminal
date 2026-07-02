@@ -171,3 +171,41 @@ export class OpenRouterQueryManager {
         throw new Error(`Failed to query OpenRouter after ${retries} attempts.`);
     }
 }
+
+// ── Standalone convenience wrappers ──────────────────────────────────────────
+// These create a singleton instance and expose the methods as bare functions
+// for backward compatibility with OpenRouterResearchManager.
+
+let _defaultInstance: OpenRouterQueryManager | null = null;
+function getDefaultInstance(): OpenRouterQueryManager {
+    if (!_defaultInstance) {
+        // Use minimal logger that falls back to console
+        const fallbackLogger: Logger = {
+            info: (msg: string, meta?: any) => console.log(`[INFO] ${msg}`, meta ?? ''),
+            warn: (msg: string, meta?: any) => console.warn(`[WARN] ${msg}`, meta ?? ''),
+            error: (msg: string, meta?: any) => console.error(`[ERROR] ${msg}`, meta ?? ''),
+            debug: (msg: string, meta?: any) => console.debug(`[DEBUG] ${msg}`, meta ?? ''),
+        };
+        _defaultInstance = new OpenRouterQueryManager(fallbackLogger);
+    }
+    return _defaultInstance;
+}
+
+/** Standalone queryModel function (backward-compatible) */
+export async function queryModel(
+    prompt: string,
+    taskType: string = 'default',
+    endpoint: string,
+    apiKey: string,
+    taskModels?: Record<string, string>,
+    modelName: string = 'primary',
+    retries: number = 3,
+    timeout: number = 60000,
+): Promise<string> {
+    return getDefaultInstance().queryModel(prompt, taskType, endpoint, apiKey, taskModels, modelName, retries, timeout);
+}
+
+/** Standalone queryOpenRouter function (backward-compatible) */
+export async function queryOpenRouter(prompt: string, apiKey: string, retries: number = 3, timeout: number = 60000): Promise<string> {
+    return getDefaultInstance().queryOpenRouter(prompt, apiKey, retries, timeout);
+}
