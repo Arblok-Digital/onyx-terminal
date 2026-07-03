@@ -1,28 +1,28 @@
 # Onyx Terminal — On-Chain Intelligence & Portfolio Terminal
 
 > ⚠️ **Status: Active Development & Debugging**  
-> Proyek ini masih dalam tahap pengembangan intensif. Banyak fitur yang belum stabil, refactoring masih berjalan, dan dokumentasi API akan menyusul.
+> This project is under active development. Features are being stabilized, refactoring is ongoing, and public API documentation is forthcoming.
 
 ---
 
-## 📌 Tentang Project
+## 📌 About
 
-**Onyx Terminal** adalah dashboard real-time untuk analisis on-chain kripto yang terintegrasi dengan:
+**Onyx Terminal** is a real-time on-chain crypto analysis dashboard integrating:
 
-- **Solana Program** — Smart contract untuk token analysis (Anchor / Rust)
-- **AI Agents** — Multi-agent intelligence system yang terhubung ke OpenRouter API (LLMs)
-- **On-Chain Data** — Pull data dari Jupiter, Arkham Intelligence, WebSocket RPC
-- **Supabase** — Backend auth & database
+- **Solana Program** — Smart contract for token analysis (Anchor / Rust)
+- **AI Agents** — Multi-agent intelligence system connected to OpenRouter API (LLMs)
+- **On-Chain Data** — Data ingestion from Jupiter, Arkham Intelligence, WebSocket RPC
+- **Supabase** — Backend authentication & database
 
 ### Tech Stack
 
-| Layer | Teknologi |
+| Layer | Technology |
 |-------|-----------|
 | Frontend | React 18 + TypeScript + Vite + Tailwind CSS |
-| State | Zustand |
+| State Management | Zustand |
 | Routing | wouter |
 | Charts | Recharts + react-grid-layout |
-| Backend (API) | Express.js (serverless via `api/`) |
+| API Backend | Express.js (serverless via `api/`) |
 | AI Integration | OpenRouter (multi-model) + Inversify DI |
 | Blockchain | Solana Web3.js + Anchor (onyx-protocol) |
 | Database | Supabase (PostgreSQL) |
@@ -30,7 +30,7 @@
 
 ---
 
-## 🚀 Cara Menjalankan
+## 🚀 Getting Started
 
 ```bash
 # Install dependencies
@@ -39,7 +39,7 @@ npm install
 # Development server
 npm run dev
 
-# Build production
+# Production build
 npm run build
 
 # Type checking
@@ -51,7 +51,7 @@ npm test
 
 ### Environment Variables
 
-Copy `.env.example` ke `.env` dan isi:
+Copy `.env.example` to `.env` and fill in:
 
 ```
 VITE_SUPABASE_URL=...
@@ -63,45 +63,45 @@ OPENROUTER_API_KEY=...
 
 ## 🧠 AI Agents System
 
-Proyek ini memiliki intelligent integration layer (`intelligent_integration/`) dengan beberapa agen:
+The project includes an intelligent integration layer (`intelligent_integration/`) with multiple specialized agents:
 
-| Agent | Fungsi |
-|-------|--------|
-| **Market Agent** | Analisis sentimen & trend pasar |
-| **OnChain Agent** | Analisis data on-chain (whales, flow) |
-| **Narrative Agent** | Identifikasi narasi dominan |
+| Agent | Role |
+|-------|------|
+| **Market Agent** | Market sentiment & trend analysis |
+| **OnChain Agent** | On-chain data analysis (whales, flow) |
+| **Narrative Agent** | Dominant narrative identification |
 | **Survival Agent** | Early warning & risk detection |
-| **Smart Money Agent** | Track smart money movement |
-| **Opportunity Agent** | Deteksi peluang arbitrase / entry |
+| **Smart Money Agent** | Smart money movement tracking |
+| **Opportunity Agent** | Arbitrage & entry opportunity detection |
 | **Flow Intelligence Agent** | Cross-chain flow analysis |
 
-Semua agen di-orchestrate oleh `AgentOrchestrator` dan bisa dipanggil via `FloatingChat` UI.
+All agents are orchestrated by the `AgentOrchestrator` and accessible via the `FloatingChat` UI.
 
 ---
 
 ## 🔗 Solana Program (onyx-protocol)
 
-Folder `onyx-protocol/` berisi smart contract Anchor untuk:
+The `onyx-protocol/` directory contains an Anchor smart contract with the following instructions:
 
-- `initialize` — Init token analysis account
-- `init_token_analysis` — Start tracking token
+- `initialize` — Initialize a token analysis account
+- `init_token_analysis` — Start tracking a token
 - `update_token_analysis` — Update on-chain analysis state
-- `close_token_analysis` — Close analysis account
+- `close_token_analysis` — Close an analysis account
 
 ---
 
-## 🗂️ Struktur Folder
+## 🗂️ Project Structure
 
 ```
 onyx-terminal/
-├── src/                        # Frontend utama (React + Vite)
+├── src/                        # Main frontend (React + Vite)
 │   ├── components/             # UI components
 │   ├── core/                   # Supabase, Config
 │   ├── feeds/                  # Feed widgets
 │   ├── hooks/                  # React hooks
-│   ├── lib/                    # IDL, validasi, program client
-│   ├── pages/                  # Halaman aplikasi
-│   ├── panels/                 # Dashboard panels (Chart, Info, dll)
+│   ├── lib/                    # IDL, validation, program client
+│   ├── pages/                  # Application pages
+│   ├── panels/                 # Dashboard panels (Chart, Info, etc.)
 │   ├── services/               # Service layer
 │   ├── ui/                     # UI primitives (shadcn)
 │   └── utils/                  # Utility functions
@@ -109,7 +109,7 @@ onyx-terminal/
 │   ├── agents/                 # Individual AI agents
 │   ├── core/                   # DI container, orchestrator, router
 │   ├── models/                 # Type definitions
-│   ├── services/               # OpenRouter, RPC, Arkham, dll
+│   ├── services/               # OpenRouter, RPC, Arkham, etc.
 │   ├── tests/                  # Unit tests & mocks
 │   ├── types/                  # Shared types
 │   └── utils/                  # Helper functions
@@ -122,24 +122,24 @@ onyx-terminal/
 
 ---
 
-## 🛠️ Status Pengembangan
+## 🛠️ Development Status
 
 - [x] Core dashboard layout & panels
 - [x] Chart components (Recharts)
 - [x] AI Agent orchestration system
 - [x] Solana on-chain data fetching
 - [x] OpenRouter multi-model integration
-- [ ] **Stabilisasi AI Agents** (ongoing debugging)
+- [ ] **AI Agents stabilization** (ongoing debugging)
 - [ ] **Refactoring & cleanup** (ongoing)
-- [ ] **Unit test coverage** (masih minim)
-- [ ] **Error handling & retry logic** (belum sempurna)
-- [ ] **Dokumentasi API publik**
-- [ ] **Deployment production**
+- [ ] **Unit test coverage** (still minimal)
+- [ ] **Error handling & retry logic** (not yet complete)
+- [ ] **Public API documentation**
+- [ ] **Production deployment**
 
-> **Catatan:** Proyek ini sedang dalam proses debugging berat untuk menstabilkan komunikasi antar-agent, rate limiting, dan error recovery. Jika ada issue atau pertanyaan, silakan buka GitHub Issues.
+> **Note:** This project is undergoing heavy debugging to stabilize inter-agent communication, rate limiting, and error recovery.
 
 ---
 
-## 📄 Lisensi
+## 📄 License
 
 Private — Arblok Digital
