@@ -7,7 +7,71 @@ dist/
 # Environment variables (Sangat penting agar API Key tidak bocor)
 .env
 .env.local
+.env.*.local
 
 # Logs and system files
 npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
 .DS_Store
+Thumbs.db
+
+# Test files — sandbox / playground (bukan unit test resmi)
+test_9router.cjs
+test_9router_final.cjs
+test_9router_v2.cjs
+test_9router_v3.cjs
+test_9router_v4.cjs
+test_browser_ai_call.cjs
+test_browser_chat_fix.html
+test_browser_chat_fix_final.html
+test_browser_environment.html
+test_combo_arblok.cjs
+test_model_orchestration.cjs
+test_model_orchestration_combo.cjs
+test_openrouter.cjs
+test_openrouter.js
+test_openrouter_simple.cjs
+
+# Build / utility scripts — sampah
+build_chat_node.js
+build_chat.ps1
+create_chat_files.bat
+create_chat_files.js
+clean_rust.bat
+run_jup_proxy.bat
+jup-proxy.js
+found.txt
+found2.txt
+node
+
+# Dev artifacts
+dev-dist/
+test-ledger/
+.replit-artifact/
+
+# Internal dev docs (bukan untuk publik)
+AI_AGENT_DEBUGGING_WORKFLOW.md
+COMPLETED_REFACTORING.md
+DEVELOPMENT_LOG.md
+ONYX_CRITICAL_ERROR_REPORT.md
+TASK_PLAN.md
+
+# README sampah di subfolder (bukan dokumentasi publik)
+src/core/README.md
+src/feeds/README.md
+src/panels/chart/README.md
+src/panels/watchlist/README.md
+src/ui/README.md
+
+# Chat test files
+src/components/chat/create_files.js
+src/components/chat/test_node.txt
+src/components/chat/test_ok2.txt
+
+# Misc
+supabase_setup.sql
+
+# Rust / Solana artifacts (biar ga ke-track)
+onyx-protocol/.gitignore
+onyx-protocol/.prettierignore
