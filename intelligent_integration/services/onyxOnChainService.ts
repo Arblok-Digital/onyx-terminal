@@ -34,13 +34,26 @@ export class OnyxOnChainService {
     async getTokenAccounts(mintAddress: string): Promise<TokenAccountInfo[]> {
         try {
             const mintPubkey = new PublicKey(mintAddress);
-            const accounts = await this.connection.getTokenLargestAccounts(mintPubkey);
+            const [accounts, mintInfo] = await Promise.all([
+                this.connection.getTokenLargestAccounts(mintPubkey),
+                this.connection.getParsedAccountInfo(mintPubkey),
+            ]);
+
+            // Extract decimals from mint account info
+            let decimals = 0;
+            if (mintInfo.value) {
+                const parsedData = (mintInfo.value.data as ParsedAccountData)?.parsed;
+                if (parsedData?.info?.decimals !== undefined) {
+                    decimals = parsedData.info.decimals;
+                }
+            }
+
             return accounts.value.map((acc) => ({
                 mint: mintAddress,
                 owner: acc.address.toBase58(),
                 amount: Number(acc.amount),
-                decimals: 0,
-                uiAmount: Number(acc.amount) / 10 ** 0,
+                decimals,
+                uiAmount: decimals > 0 ? Number(acc.amount) / 10 ** decimals : Number(acc.amount),
             }));
         } catch (error) {
             console.error('[OnyxOnChainService] getTokenAccounts error:', error);
@@ -54,7 +67,20 @@ export class OnyxOnChainService {
     async getTopHolders(mintAddress: string, limit: number = 20): Promise<TokenHolderInfo[]> {
         try {
             const mintPubkey = new PublicKey(mintAddress);
-            const accounts = await this.connection.getTokenLargestAccounts(mintPubkey);
+            const [accounts, mintInfo] = await Promise.all([
+                this.connection.getTokenLargestAccounts(mintPubkey),
+                this.connection.getParsedAccountInfo(mintPubkey),
+            ]);
+
+            // Extract decimals for uiAmount calculation
+            let decimals = 0;
+            if (mintInfo.value) {
+                const parsedData = (mintInfo.value.data as ParsedAccountData)?.parsed;
+                if (parsedData?.info?.decimals !== undefined) {
+                    decimals = parsedData.info.decimals;
+                }
+            }
+
             const totalSupply = accounts.value.reduce((sum, acc) => sum + Number(acc.amount), 0);
             return accounts.value.slice(0, limit).map((acc) => ({
                 address: acc.address.toBase58(),

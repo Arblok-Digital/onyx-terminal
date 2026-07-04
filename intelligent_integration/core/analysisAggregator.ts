@@ -13,6 +13,7 @@ import {
     SmartMoneyAnalysis,
     SurvivalAnalysis
 } from '../types/analysisTypes';
+import { getActiveWeights } from './scoringWeights';
 
 /**
  * Parsed Intelligence Report structure (matches ReportParser.parseIntelligenceResponse output)
@@ -153,13 +154,14 @@ export class AnalysisAggregator {
             narrativeScore = narrative.narrativeScore || 50;
         }
 
-        // Calculate overall score (weighted average)
+        // Calculate overall score (weighted average from configurable weights)
+        const weights = getActiveWeights();
         const overallScore = Math.round(
-            (opportunityScore * 0.3) +
-            (riskScore * 0.25) +
-            (smartMoneyScore * 0.2) +
-            (survivalScore * 0.15) +
-            (narrativeScore * 0.1)
+            (opportunityScore * weights.opportunity) +
+            (riskScore * weights.risk) +
+            (smartMoneyScore * weights.smartMoney) +
+            (survivalScore * weights.survival) +
+            (narrativeScore * weights.narrative)
         );
 
         // Calculate conviction score (average of all scores)

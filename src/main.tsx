@@ -3,6 +3,7 @@ import { registerSW } from 'virtual:pwa-register';
 import React, { useMemo, useEffect } from 'react';
 import { ConnectionProvider, WalletProvider, useConnection } from '@solana/wallet-adapter-react';
 import { WalletModalProvider } from '@solana/wallet-adapter-react-ui';
+import { Toaster } from 'sonner';
 import App from "./App";
 import "./index.css";
 import { CONFIG } from "./core/config";
@@ -15,8 +16,9 @@ import '@solana/wallet-adapter-react-ui/styles.css';
 // Registrasi Service Worker untuk PWA
 registerSW({ immediate: true });
 
-// --- Validasi Konfigurasi ---
-const validationResult = configValidator.validate();
+// --- Validasi Konfigurasi (hanya critical: network) ---
+// AI/supabase keys yang kosong TIDAK ngeblok UI
+const validationResult = configValidator.validateCritical();
 
 const FatalErrorScreen = ({ errors }: { errors: string[] }) => (
   <div style={{
@@ -69,6 +71,18 @@ const Root = () => {
       <WalletProvider wallets={wallets} autoConnect>
         <WalletModalProvider>
           <OrchestratorInit>
+            <Toaster
+              position="bottom-right"
+              toastOptions={{
+                style: {
+                  background: '#111827',
+                  border: '1px solid #374151',
+                  color: '#e5e7eb',
+                  fontFamily: 'monospace',
+                  fontSize: '13px',
+                },
+              }}
+            />
             <App />
           </OrchestratorInit>
         </WalletModalProvider>

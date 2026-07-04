@@ -8,6 +8,8 @@ dist/
 .env
 .env.local
 .env.*.local
+.env.development
+.env.production
 
 # Logs and system files
 npm-debug.log*
@@ -50,6 +52,14 @@ dev-dist/
 test-ledger/
 .replit-artifact/
 
+# Server / proxy files
+server.js
+jup-proxy.js
+
+# Random junk files
+dy
+chore*
+
 # Internal dev docs (bukan untuk publik)
 AI_AGENT_DEBUGGING_WORKFLOW.md
 COMPLETED_REFACTORING.md
@@ -68,6 +78,9 @@ src/ui/README.md
 src/components/chat/create_files.js
 src/components/chat/test_node.txt
 src/components/chat/test_ok2.txt
+
+# Planning / temp docs
+CHATBOT_REBUILD_PLAN.md
 
 # Misc
 supabase_setup.sql

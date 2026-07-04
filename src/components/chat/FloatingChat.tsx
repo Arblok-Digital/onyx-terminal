@@ -11,7 +11,157 @@ import React, { useState, useRef, useEffect, useCallback } from "react";
 import { useUIStore } from "@/core/store/ui.store";
 import styles from "./OnyxChat.module.css";
 import { analyzeToken, IntelligenceReport } from "@intelligent_integration";
-import { getDashboardContext } from "@/services/dashboardDataService";
+import { getDashboardContext, getDashboardDataWithIntelligence, DashboardData, formatDashboardContext } from "@/services/dashboardDataService";
+
+/* ------------------------------------------------------------------ */
+/* Enhanced Report Formatter — combines raw analysis + dashboard data */
+/* ------------------------------------------------------------------ */
+
+function formatAnalysisReport(
+    report: IntelligenceReport,
+    dashboardData?: DashboardData
+): string {
+    if (!report || report.summary?.startsWith("Analysis failed")) {
+        return `❌ **Analisis Gagal**\nSaya tidak dapat mengambil laporan intelijen lengkap untuk ${report.tokenSymbol}. Ini mungkin masalah sementara dengan salah satu sumber data.`;
+    }
+
+    const {
+        summary,
+        recommendations,
+        onchainAnalysis,
+        marketAnalysis,
+        narrativeAnalysis,
+        smartMoneyAnalysis,
+        survivalAnalysis,
+        opportunityAnalysis,
+    } = report;
+
+    const riskScore = (onchainAnalysis?.riskScore ?? 0);
+    const narrativeScore = (narrativeAnalysis?.narrativeScore ?? 0);
+    const smartMoneyScore = (smartMoneyAnalysis?.smartMoneyScore ?? 0);
+    const survivalScore = (survivalAnalysis?.survivalScore ?? 0);
+    const opportunityScore = (opportunityAnalysis?.opportunityScore ?? 0);
+
+    const lines: string[] = [];
+
+    // -- Header --
+    lines.push(`✅ **Analisis AMD Intelijen — ${report.tokenSymbol}**`);
+    lines.push("");
+
+    // -- Executive Summary (from dashboard intelligence) --
+    if (dashboardData?.intelligence?.executiveSummary) {
+        lines.push(`📋 **Executive Summary:**`);
+        lines.push(dashboardData.intelligence.executiveSummary);
+        lines.push("");
+    }
+
+    // -- Ringkasan (from raw report) --
+    lines.push(`**Ringkasan Intelijen:**`);
+    lines.push(summary ?? 'Tidak ada ringkasan.');
+    lines.push("");
+
+    // -- Score Dashboard --
+    lines.push("--- **SCOREBOARD** ---");
+    if (dashboardData?.intelligence) {
+        const intel = dashboardData.intelligence;
+        lines.push(`🎯 **Rekomendasi:** ${intel.recommendation || "N/A"}`);
+        lines.push(`📊 **Confidence:** ${intel.confidenceScore ? (intel.confidenceScore * 100).toFixed(0) + "%" : "N/A"}`);
+        lines.push(`⚠️ **Rug Pull Warning:** ${intel.rugPullWarning || "N/A"}`);
+        lines.push(`🐋 **Smart Money Activity:** ${intel.smartMoneyActivity || "N/A"}`);
+        lines.push(`📢 **Narrative Strength:** ${intel.narrativeStrength || "N/A"}`);
+        lines.push(`💎 **Opportunity Score:** ${intel.opportunityScore ? (intel.opportunityScore * 100).toFixed(0) + "%" : "N/A"}`);
+        lines.push("");
+    } else {
+        lines.push(`🎯 **Skor Risiko:** ${riskScore.toFixed(2)}/1.0`);
+        lines.push(`📢 **Skor Narasi:** ${narrativeScore.toFixed(2)}/1.0`);
+        lines.push(`🐋 **Skor Smart Money:** ${smartMoneyScore.toFixed(2)}/1.0`);
+        lines.push(`🛡️ **Skor Survival:** ${survivalScore.toFixed(2)}/1.0`);
+        lines.push(`💎 **Skor Peluang:** ${opportunityScore.toFixed(2)}/1.0`);
+        lines.push("");
+    }
+
+    // -- On-Chain Insights --
+    if (onchainAnalysis) {
+        lines.push("--- **ON-CHAIN INSIGHTS** ---");
+        const whaleWallets = onchainAnalysis.whaleActivity?.whaleWallets ?? (dashboardData?.intelligence?.keyInsights?.some(k => k.includes('whale')) ? '?' : 0);
+        lines.push(`🐳 **Aktivitas Whale:** ${whaleWallets} dompet besar terdeteksi`);
+        lines.push(`📈 **Pertumbuhan Holder:** ${onchainAnalysis.holderGrowth?.newHolders ?? 0} holder baru`);
+        lines.push(`🔒 **Likuiditas Terkunci:** ${onchainAnalysis.liquidityAnalysis?.lockedLiquidity ? "✅ Aman" : "❌ Tidak terkunci"}`);
+        const rugScore = onchainAnalysis.rugPullIndicators?.overallRugScore ?? 0;
+        lines.push(`🚨 **Risiko Rug Pull:** ${rugScore > 0.6 ? "TINGGI 🚨" : rugScore > 0.3 ? "Sedang ⚠️" : "Rendah ✅"}`);
+        lines.push(`🧪 **Kontak Terverifikasi:** ${onchainAnalysis.contractAnalysis?.isVerified ? "✅ Ya" : "❌ Tidak"}`);
+        lines.push(`🔏 **Mint Authority:** ${onchainAnalysis.contractAnalysis?.mintAuthority ? "❌ ADA (Risk!)" : "✅ Tidak ada"}`);
+        lines.push("");
+    }
+
+    // -- Market Pulse --
+    if (marketAnalysis) {
+        lines.push("--- **MARKET PULSE** ---");
+        const priceChange = marketAnalysis.priceTrend?.change24h ?? 0;
+        lines.push(`💵 **Harga:** ${marketAnalysis.priceTrend?.current ? `$${marketAnalysis.priceTrend.current.toFixed(8)}` : "N/A"}`);
+        lines.push(`📉 **Perubahan 24j:** ${(priceChange * 100).toFixed(2)}% ${priceChange > 0 ? "🟢" : "🔴"}`);
+        lines.push(`📊 **Volume 24j:** ${marketAnalysis.volumeAnalysis?.volume24h ? `$${marketAnalysis.volumeAnalysis.volume24h.toLocaleString()}` : "N/A"}`);
+        lines.push(`🌊 **Volatilitas:** ${(marketAnalysis.volatilityScore ?? 0) > 0.5 ? "Tinggi ⚡" : "Normal"}`);
+        const sentiment = marketAnalysis.sentimentAnalysis?.sentimentScore ?? 0;
+        lines.push(`💬 **Sentimen:** ${sentiment > 0.5 ? "Positif 😊" : sentiment > 0.3 ? "Netral 😐" : "Negatif 😠"}`);
+        lines.push("");
+    }
+
+    // -- Narrative & Social --
+    if (narrativeAnalysis) {
+        lines.push("--- **NARRATIVE & SOCIAL** ---");
+        lines.push(`📢 **Tren Narasi:** ${(narrativeAnalysis?.narrativeScore ?? 0) > 0.5 ? "Kuat 🔥" : "Lemah"}`);
+    if ((narrativeAnalysis?.trendingTopics?.length ?? 0) > 0) {
+        lines.push(`🏷️ **Topik Trending:** ${narrativeAnalysis!.trendingTopics!.slice(0, 5).join(", ")}`);
+    }
+    if ((narrativeAnalysis?.influencerActivity?.topInfluencers?.length ?? 0) > 0) {
+        lines.push(`👑 **Influencer Aktif:** ${narrativeAnalysis!.influencerActivity!.topInfluencers!.slice(0, 3).join(", ")}`);
+    }
+        lines.push("");
+    }
+
+    // -- Opportunity Analysis --
+    if (opportunityAnalysis) {
+        lines.push("--- **OPPORTUNITY ANALYSIS** ---");
+        const eoi = (opportunityAnalysis as any).eoiScore ?? 0;
+        lines.push(`💎 **EOI Score:** ${eoi > 70 ? `${eoi}/100 (Strong! 🔥)` : `${eoi}/100 (Moderate)`}`);
+        const rating = (opportunityAnalysis as any).rating ?? "N/A";
+        lines.push(`📊 **Rating:** ${rating}`);
+        if ((opportunityAnalysis as any).entryStrategy?.suggestedEntryPrice) {
+            lines.push(`🎯 **Entry Strategy:** Suggested at $${(opportunityAnalysis as any).entryStrategy.suggestedEntryPrice.toFixed(8)}`);
+        }
+        lines.push("");
+    }
+
+    // -- Survival Analysis --
+    if (survivalAnalysis) {
+        lines.push("--- **SURVIVAL ANALYSIS** ---");
+        const survivalPct = (survivalAnalysis.survivalProbability ?? 0) * 100;
+        lines.push(`🛡️ **Survival Probability:** ${survivalPct.toFixed(1)}%`);
+        const liquidityHealth = survivalAnalysis.liquidityHealth?.sustainability ?? "N/A";
+        lines.push(`💧 **Liquidity Health:** ${liquidityHealth}`);
+        lines.push(`📈 **Holder Retention:** ${(survivalAnalysis.holderRetention?.retentionRate ?? 0) > 0.5 ? "Good ✅" : "Low ⚠️"}`);
+        lines.push("");
+    }
+
+    // -- Key Insights from dashboard intelligence --
+    if (dashboardData?.intelligence?.keyInsights && dashboardData.intelligence.keyInsights.length > 0) {
+        lines.push("--- **KEY INSIGHTS** ---");
+        dashboardData.intelligence.keyInsights.forEach(k => lines.push(`🔍 ${k}`));
+        lines.push("");
+    }
+
+    // -- Recommendations --
+    lines.push("--- **REKOMENDASI** ---");
+    if (dashboardData?.intelligence?.recommendation) {
+        lines.push(dashboardData.intelligence.recommendation);
+    } else {
+        (recommendations ?? ['Tidak ada rekomendasi.']).forEach(r => lines.push(`- ${r}`));
+    }
+    lines.push("");
+
+    return lines.join("\n");
+}
 
 /* ------------------------------------------------------------------ */
 /* Types                                                               */
@@ -82,25 +232,31 @@ interface AIConfig {
 }
 
 function getAIConfig(): AIConfig | null {
+    // 1) 9Router Gateway (Primary AI)
     const gwUrl = import.meta.env.VITE_AI_GATEWAY_URL as string | undefined;
-    const gwKey = import.meta.env.VITE_AI_GATEWAY_KEY as string | undefined;
-    if (gwUrl && gwKey) {
+    const gwKey =
+        (import.meta.env.VITE_AI_GATEWAY_KEY as string | undefined) ||
+        (import.meta.env.VITE_9ROUTER_API_KEY as string | undefined);
+    if (gwUrl && gwKey && !gwKey.startsWith("#") && !gwKey.startsWith(" ")) {
         return {
             url: `${gwUrl.replace(/\/+$/, "")}/chat/completions`,
             key: gwKey,
-            model: "arblok",
+            model: "arblok", // Menggunakan model "arblok" yang lebih stabil
         };
     }
+
+    // 2) OpenRouter (Fallback AI — Free Models)
     const orUrl = import.meta.env.VITE_OPENROUTER_ENDPOINT as string | undefined;
     const orKey = import.meta.env.VITE_OPENROUTER_API_KEY as string | undefined;
     const orEnabled = import.meta.env.VITE_OPENROUTER_ENABLED as string | undefined;
-    if (orUrl && orKey && orEnabled === "true") {
+    if (orUrl && orKey && !orKey.startsWith("#") && !orKey.startsWith(" ") && orEnabled === "true") {
         return {
             url: orUrl,
             key: orKey,
             model: "openai/gpt-3.5-turbo",
         };
     }
+
     return null;
 }
 
@@ -110,7 +266,8 @@ async function askAI(
     userMessage: string,
     history: ChatMessage[],
 ): Promise<string> {
-    const cfg = getAIConfig();
+    // Try primary AI config first
+    let cfg = getAIConfig();
     if (!cfg) {
         throw new Error("AI_NOT_CONFIGURED");
     }
@@ -141,8 +298,7 @@ async function askAI(
 
 ${dashboardContext
             ? `📈 DATA DASHBOARD ONYX (REAL-TIME):\n${dashboardContext}\n\n✅ PENTING: Data di atas adalah data LIVE dari dashboard Onyx Terminal yang terintegrasi dengan DexScreener, WebSocket real-time feeds, dan AMD Intelligence agents. Gunakan data ini sebagai basis utama analisismu. Data ini mencakup:\n- Price movements (5m, 1h, 6h, 24h)\n- Volume analysis & transaction counts\n- Buy/sell pressure & liquidity\n- AMD Intelligence Report (rug check, smart money, narrative strength)\n- Market cap, FDV, dan token age\n\nJawab pertanyaan user dengan DETAIL menggunakan data di atas.`
-            : "⚠️ Data dashboard tidak tersedia untuk token ini. Jawab berdasarkan pengetahuan umummu tentang crypto trading."
-        }
+            : "⚠️ Data dashboard tidak tersedia untuk token ini. Jawab berdasarkan pengetahuan umummu tentang crypto trading."}
 
 🗣️ GAYA BICARA: Ramah, profesional, pakai emoji untuk clarity. Jawab dalam Bahasa Indonesia. Kalau ada warning penting (rug risk tinggi), kasih tau dengan jelas.`;
 
@@ -158,34 +314,83 @@ ${dashboardContext
 
     messages.push({ role: "user", content: userMessage });
 
-    const response = await fetch(cfg.url, {
-        method: "POST",
-        headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${cfg.key}`,
-        },
-        body: JSON.stringify({
-            model: cfg.model,
-            messages,
-            max_tokens: 1000,
-            temperature: 0.4,
-            stream: false,
-        }),
-    });
+    try {
+        const response = await fetch(cfg.url, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${cfg.key}`,
+            },
+            body: JSON.stringify({
+                model: cfg.model,
+                messages,
+                max_tokens: 1000,
+                temperature: 0.4,
+                stream: false,
+            }),
+        });
 
-    if (!response.ok) {
-        const errText = await response.text().catch(() => "Unknown error");
-        throw new Error(`AI API error (${response.status}): ${errText.slice(0, 200)}`);
-    }
+        if (!response.ok) {
+            const errText = await response.text().catch(() => "Unknown error");
+            throw new Error(`AI API error (${response.status}): ${errText.slice(0, 200)}`);
+        }
 
-    const result = await response.json();
-    const content = result?.choices?.[0]?.message?.content?.trim();
-    if (!content) {
-        throw new Error("AI returned empty response");
+        const result = await response.json();
+        const content = result?.choices?.[0]?.message?.content?.trim();
+        if (!content) {
+            throw new Error("AI returned empty response");
+        }
+        return content;
+    } catch (error) {
+        // If primary AI fails (connection refused, etc.), try fallback to OpenRouter
+        console.error("[AI] Primary AI failed:", error);
+
+        // Get fallback config (OpenRouter)
+        const orUrl = import.meta.env.VITE_OPENROUTER_ENDPOINT as string | undefined;
+        const orKey = import.meta.env.VITE_OPENROUTER_API_KEY as string | undefined;
+        const orEnabled = import.meta.env.VITE_OPENROUTER_ENABLED as string | undefined;
+
+        if (orUrl && orKey && !orKey.startsWith("#") && !orKey.startsWith(" ") && orEnabled === "true") {
+            console.log("[AI] Trying fallback to OpenRouter...");
+
+            try {
+                const response = await fetch(orUrl, {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        Authorization: `Bearer ${orKey}`,
+                        "HTTP-Referer": "https://onyx-terminal.vercel.app",
+                        "X-Title": "Onyx Terminal"
+                    },
+                    body: JSON.stringify({
+                        model: "openai/gpt-3.5-turbo",
+                        messages,
+                        max_tokens: 1000,
+                        temperature: 0.4,
+                        stream: false,
+                    }),
+                });
+
+                if (!response.ok) {
+                    const errText = await response.text().catch(() => "Unknown error");
+                    throw new Error(`OpenRouter API error (${response.status}): ${errText.slice(0, 200)}`);
+                }
+
+                const result = await response.json();
+                const content = result?.choices?.[0]?.message?.content?.trim();
+                if (!content) {
+                    throw new Error("OpenRouter returned empty response");
+                }
+                return content;
+            } catch (fallbackError) {
+                console.error("[AI] OpenRouter fallback failed:", fallbackError);
+                throw new Error(`AI_FALLBACK_FAILED: ${fallbackError instanceof Error ? fallbackError.message : String(fallbackError)}`);
+            }
+        }
+
+        throw new Error(`AI_FAILED: ${error instanceof Error ? error.message : String(error)}`);
     }
-    return content;
 }
-
 
 /* ------------------------------------------------------------------ */
 /* Quick prompts                                                       */
@@ -245,27 +450,42 @@ const FloatingChat: React.FC = () => {
             timestamp: Date.now(),
         };
         setMessages((prev) => [...prev, userMsg]);
-
         setLoading(true);
 
         try {
-            const response = await askAI(tokenSymbol, tokenAddress || "N/A", text, messages);
+            const intent = detectIntent(text);
+            let responseText: string;
+
+            // If intent is analysis-related and token is selected, use the powerful local agent orchestrator.
+            if (tokenAddress && (intent === 'summary' || intent === 'rug' || intent === 'whale' || intent === 'flow')) {
+                const thinkingMsg: ChatMessage = {
+                    id: `s-${Date.now()}-thinking`,
+                    role: 'system',
+                    text: `🤖 Menganalisis ${tokenSymbol} menggunakan AMD Intelligence...`
+                };
+                setMessages(prev => [...prev, thinkingMsg]);
+
+                const report = await analyzeToken(tokenAddress, tokenSymbol);
+                responseText = formatAnalysisReport(report);
+
+                // Replace "thinking" message with the actual report
+                setMessages(prev => prev.filter(m => m.id !== thinkingMsg.id));
+
+            } else {
+                // Otherwise, use the conversational AI for general questions.
+                responseText = await askAI(tokenSymbol, tokenAddress || "N/A", text, messages);
+            }
 
             const sysMsg: ChatMessage = {
                 id: `s-${Date.now()}`,
                 role: "system",
-                text: response,
+                text: responseText,
                 tokenAddress,
                 timestamp: Date.now(),
             };
             setMessages((prev) => [...prev, sysMsg]);
+
         } catch (e: any) {
-            const errMsg: ChatMessage = {
-                id: `s-${Date.now()}`,
-                role: "system",
-                text: `❌ AI Assistant gagal: ${e?.message || "unknown error"}. Coba lagi ya. Pastikan 9Router Gateway berjalan atau OpenRouter API key valid.`,
-            };
-            // BEGIN FIX: Improved error handling messages
             let errorMessage = e?.message || "unknown error";
             if (errorMessage.includes("AI returned empty response")) {
                 errorMessage = "AI mengembalikan respons kosong. Ini mungkin berarti model 'arblok' di 9Router Gateway Anda tidak merespons dengan benar atau konfigurasinya salah. Pastikan 9Router Gateway berjalan dengan baik dan model 'arblok' dikonfigurasi dengan benar.";
@@ -274,14 +494,13 @@ const FloatingChat: React.FC = () => {
             } else if (errorMessage.includes("AI_NOT_CONFIGURED")) {
                 errorMessage = "AI Assistant tidak dikonfigurasi. Pastikan variabel lingkungan VITE_AI_GATEWAY_URL dan VITE_AI_GATEWAY_KEY (atau OpenRouter) diatur dengan benar.";
             }
-            const newErrMsg: ChatMessage = {
+             const newErrMsg: ChatMessage = {
                 id: `s-${Date.now()}`,
                 role: "system",
                 text: `❌ AI Assistant gagal: ${errorMessage}`,
             };
             setMessages((prev) => [...prev, newErrMsg]);
             setError(errorMessage);
-            // END FIX: Improved error handling messages
         } finally {
             setLoading(false);
         }

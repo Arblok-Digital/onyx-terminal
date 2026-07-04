@@ -295,3 +295,10 @@
   color: var(--text-muted);
   text-align: center;
 }
+
+.loadingWrap {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 10px;
+}

@@ -123,7 +123,8 @@ export default function Swap() {
 
     const fetchAllBalances = async () => {
       try {
-        const connection = new Connection(CONFIG.HELIUS_RPC(CONFIG.HELIUS_API_KEY));
+        // Use MAINNET_RPC for swap panel (real transactions, fee revenue)
+        const connection = new Connection(CONFIG.MAINNET_RPC);
         const newBalances: Record<string, number> = {};
 
         // 1. Fetch SOL Balance secara aman
@@ -380,8 +381,8 @@ export default function Swap() {
       // Sign transaksi
       const signed = await signTransaction(transaction);
 
-      // Kirim via RPC (Gunakan Helius dari config)
-      const connection = new Connection(CONFIG.HELIUS_RPC(CONFIG.HELIUS_API_KEY));
+      // Kirim via RPC (Use MAINNET_RPC for real transactions)
+      const connection = new Connection(CONFIG.MAINNET_RPC);
       const signature = await connection.sendRawTransaction(signed.serialize(), {
         skipPreflight: false,
       });

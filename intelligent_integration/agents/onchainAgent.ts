@@ -47,16 +47,74 @@ export class OnchainAgent {
      * Get token transfers from Helius
      */
     private async getTokenTransfers(tokenAddress: string): Promise<any> {
-        this.logger.warn('Helius token transfers API is currently disabled. Returning empty data.', { tokenAddress });
-        return { transfers: [], totalSupply: 0 };
+        if (!this.heliusApiKey) {
+            this.logger.warn('Helius API key not provided. Skipping Helius transfers data.');
+            return { transfers: [], totalSupply: 0 };
+        }
+
+        try {
+            const response = await fetch(`https://api.helius.xyz/v0/token/transfers?api-key=${this.heliusApiKey}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    mint: tokenAddress,
+                    limit: 100
+                })
+            });
+
+            if (!response.ok) {
+                this.logger.error('Helius API error', new Error(response.statusText), { tokenAddress, status: response.status });
+                return { transfers: [], totalSupply: 0 };
+            }
+
+            const data = await response.json();
+            return {
+                transfers: data.transfers || [],
+                totalSupply: data.totalSupply || 0
+            };
+        } catch (error) {
+            this.logger.error('Helius token transfers API failed', error as Error, { tokenAddress });
+            return { transfers: [], totalSupply: 0 };
+        }
     }
 
     /**
      * Get token holders from Helius
      */
     private async getTokenHolders(tokenAddress: string): Promise<any> {
-        this.logger.warn('Helius token holders API is currently disabled. Returning empty data.', { tokenAddress });
-        return { holders: [], totalSupply: 0 };
+        if (!this.heliusApiKey) {
+            this.logger.warn('Helius API key not provided. Skipping Helius holders data.');
+            return { holders: [], totalSupply: 0 };
+        }
+
+        try {
+            const response = await fetch(`https://api.helius.xyz/v0/token/holders?api-key=${this.heliusApiKey}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    mint: tokenAddress,
+                    limit: 1000
+                })
+            });
+
+            if (!response.ok) {
+                this.logger.error('Helius API error', new Error(response.statusText), { tokenAddress, status: response.status });
+                return { holders: [], totalSupply: 0 };
+            }
+
+            const data = await response.json();
+            return {
+                holders: data.holders || [],
+                totalSupply: data.totalSupply || 0
+            };
+        } catch (error) {
+            this.logger.error('Helius token holders API failed', error as Error, { tokenAddress });
+            return { holders: [], totalSupply: 0 };
+        }
     }
 
     /**
@@ -362,19 +420,42 @@ export class OnchainAgent {
         devWalletBalance: number;
         devWallets: string[];
     } {
-        // Mock implementation - in production this would use real developer wallet detection
-        // For now, we'll simulate finding 1-2 developer wallets with suspicious activity
+        // Detect developer wallets from transfer origins
+        const devWallets: string[] = [];
+        let devWalletTransactions = 0;
+        let suspiciousTransfers = 0;
+        let devWalletBalance = 0;
 
-        const devWallets = ['0xdevWallet1...', '0xdevWallet2...'];
-        const devWalletTransactions = 15 + Math.floor(Math.random() * 10);
-        const suspiciousTransfers = 3 + Math.floor(Math.random() * 5);
-        const devWalletBalance = 100000 + Math.floor(Math.random() * 50000);
+        if (transfers?.transfers?.length > 0) {
+            // Find frequent sender wallets as potential dev wallets
+            const senderCounts = new Map<string, number>();
+            for (const t of transfers.transfers) {
+                if (t.from) {
+                    senderCounts.set(t.from, (senderCounts.get(t.from) || 0) + 1);
+                }
+            }
+            // Wallets with >5 transfers are likely dev/insider wallets
+            for (const [wallet, count] of senderCounts) {
+                if (count > 5) {
+                    devWallets.push(wallet);
+                    devWalletTransactions += count;
+                    suspiciousTransfers += count - 5; // transfers beyond normal
+                }
+            }
+        }
 
+        // Use holder data for balance info if available
+        if (holders?.holders?.length > 0) {
+            const topHolder = holders.holders[0];
+            devWalletBalance = topHolder.amount || 0;
+        }
+
+        // Limit to max 5 dev wallets, cap scores
         return {
-            devWalletTransactions,
-            suspiciousTransfers,
+            devWalletTransactions: Math.min(devWalletTransactions, 100),
+            suspiciousTransfers: Math.min(suspiciousTransfers, 20),
             devWalletBalance,
-            devWallets
+            devWallets: devWallets.slice(0, 5)
         };
     }
 
@@ -387,11 +468,12 @@ export class OnchainAgent {
         lockedLiquidity: number;
         liquidityConcentration: number;
     } {
-        // Mock implementation - in production this would use real liquidity data
-        const liquidityDepth = liquidity.liquidity || 1000000;
-        const liquidityChange24h = (Math.random() * 0.2 - 0.1); // -10% to +10%
-        const lockedLiquidity = liquidityDepth * (0.7 + Math.random() * 0.3); // 70-100% locked
-        const liquidityConcentration = 0.6 + Math.random() * 0.4; // 60-100% concentration
+        const liquidityDepth = liquidity.liquidity || 0;
+        // When we have real liquidity data, derive the rest from actual data
+        // lockedLiquidity is approximated from known LP locks (if available)
+        const lockedLiquidity = liquidity.lockedLiquidity ?? (liquidityDepth > 0 ? liquidityDepth * 0.5 : 0);
+        const liquidityChange24h = liquidity.liquidityChange24h ?? 0;
+        const liquidityConcentration = liquidity.concentration ?? (liquidityDepth > 0 ? 0.3 : 0);
 
         return {
             liquidityDepth,

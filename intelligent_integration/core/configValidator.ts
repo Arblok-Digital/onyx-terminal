@@ -3,14 +3,13 @@
  * @layer core
  * @desc Validates runtime configuration for AI providers and core services.
  *       Ensures required environment variables are present before the app boots.
+ *       Critical validation (network) vs non-critical (AI keys, supabase) dipisah
+ *       agar error API AI tidak merusak UI.
  *
  * @usage
  *   const validator = new ConfigValidator();
- *   const result = validator.validate();
- *   if (!result.valid) {
- *       console.error('Missing config:', result.missing);
- *       process.exit(1);
- *   }
+ *   const result = validator.validateCritical(); // only critical
+ *   const fullResult = validator.validate();       // all rules
  *
  * @exposes ConfigValidator, ConfigValidationResult, ConfigRule
  */
@@ -28,6 +27,8 @@ export interface ConfigRule {
     pattern?: RegExp;
     /** Custom validation message */
     patternMessage?: string;
+    /** Whether this rule is critical for app boot (default: false) */
+    critical?: boolean;
 }
 
 export interface ConfigValidationResult {
@@ -39,20 +40,41 @@ export interface ConfigValidationResult {
 
 /**
  * Default configuration rules for Onyx Terminal.
- * These are the minimum required variables for the app to function.
+ * Dipisah antara critical (harus ada agar app jalan) dan non-critical (opsional).
  */
 const DEFAULT_RULES: ConfigRule[] = [
-    // ── AI Providers ──
+    // ── Critical: Network — tanpanya app gak jalan ──
+    {
+        key: 'VITE_SOLANA_RPC',
+        description: 'Solana RPC endpoint',
+        required: false,
+        default: 'https://api.devnet.solana.com',
+        pattern: /^https?:\/\/.+/,
+        patternMessage: 'Must be a valid HTTP/HTTPS URL',
+        critical: true,
+    },
+    {
+        key: 'VITE_SOLANA_NETWORK',
+        description: 'Solana network (mainnet-beta / devnet)',
+        required: false,
+        default: 'devnet',
+        critical: true,
+    },
+
+    // ── Non-Critical: AI Providers ──
     {
         key: 'VITE_9ROUTER_API_KEY',
         description: '9Router API Key for AI model routing',
+        required: false,
         pattern: /^(sk-or-|9r-|)[a-zA-Z0-9_-]+$/,
         patternMessage: 'Must start with "sk-or-", "9r-", or be a valid API key format',
+        critical: false,
     },
     {
         key: 'VITE_OPENROUTER_API_KEY',
         description: 'OpenRouter API Key (fallback provider)',
         required: false,
+        critical: false,
     },
     {
         key: 'VITE_DEFAULT_AI_PROVIDER',
@@ -61,39 +83,26 @@ const DEFAULT_RULES: ConfigRule[] = [
         default: '9router',
         pattern: /^(9router|openrouter)$/i,
         patternMessage: 'Must be "9router" or "openrouter"',
+        critical: false,
     },
 
-    // ── Supabase ──
+    // ── Non-Critical: Supabase (analytics only) ──
     {
         key: 'VITE_SUPABASE_URL',
         description: 'Supabase project URL',
+        required: false,
         pattern: /^https:\/\/[a-zA-Z0-9-]+\.supabase\.co$/,
         patternMessage: 'Must be a valid Supabase URL (https://*.supabase.co)',
+        critical: false,
     },
     {
         key: 'VITE_SUPABASE_ANON_KEY',
         description: 'Supabase anonymous API key',
+        required: false,
+        critical: false,
     },
 
-    // ── Solana ──
-    {
-        key: 'VITE_SOLANA_RPC_URL',
-        description: 'Solana RPC endpoint URL',
-        required: false,
-        default: 'https://api.mainnet-beta.solana.com',
-        pattern: /^https?:\/\/.+/,
-        patternMessage: 'Must be a valid HTTP/HTTPS URL',
-    },
-    {
-        key: 'VITE_SOLANA_WS_URL',
-        description: 'Solana WebSocket endpoint URL',
-        required: false,
-        default: 'wss://api.mainnet-beta.solana.com',
-        pattern: /^wss?:\/\/.+/,
-        patternMessage: 'Must be a valid WebSocket URL',
-    },
-
-    // ── Jupiter ──
+    // ── Non-Critical: Jupiter ──
     {
         key: 'VITE_JUPITER_API_URL',
         description: 'Jupiter Aggregator API URL',
@@ -101,6 +110,33 @@ const DEFAULT_RULES: ConfigRule[] = [
         default: 'https://quote-api.jup.ag/v6',
         pattern: /^https?:\/\/.+/,
         patternMessage: 'Must be a valid HTTP/HTTPS URL',
+        critical: false,
+    },
+    {
+        key: 'VITE_JUPITER_REFERRAL_WALLET',
+        description: 'Jupiter referral wallet',
+        required: false,
+        critical: false,
+    },
+    {
+        key: 'VITE_JUPITER_FEE_ACCOUNT_USDC',
+        description: 'Jupiter fee account USDC',
+        required: false,
+        critical: false,
+    },
+
+    // ── Non-Critical: External APIs ──
+    {
+        key: 'VITE_HELIUS_API_KEY',
+        description: 'Helius API Key for enhanced RPC',
+        required: false,
+        critical: false,
+    },
+    {
+        key: 'VITE_BIRDEYE_API_KEY',
+        description: 'Birdeye API Key for on-chain data',
+        required: false,
+        critical: false,
     },
 ];
 
@@ -124,15 +160,26 @@ export class ConfigValidator {
     }
 
     /**
+     * Validate only critical rules — jika ini gagal, UI memang gak bisa jalan.
+     */
+    validateCritical(): ConfigValidationResult {
+        return this.validate({ onlyCritical: true });
+    }
+
+    /**
      * Run validation against current environment variables.
      * Reads from `import.meta.env` (Vite) or `process.env` (Node).
      */
-    validate(): ConfigValidationResult {
+    validate(options?: { onlyCritical?: boolean }): ConfigValidationResult {
         const missing: string[] = [];
         const warnings: string[] = [];
         const values: Record<string, string | undefined> = {};
+        const onlyCritical = options?.onlyCritical ?? false;
 
         for (const rule of this.rules) {
+            // Skip non-critical jika hanya butuh validasi critical
+            if (onlyCritical && !rule.critical) continue;
+
             const value = this.getEnv(rule.key);
             values[rule.key] = value;
 

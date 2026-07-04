@@ -9,8 +9,8 @@ const MINTS = {
   USDC: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
 };
 const FEE_ACCOUNTS = {
-  WSOL: process.env.VITE_JUPITER_FEE_ACCOUNT_WSOL || "7S7KfighhMhasJrVbkk8R3hKjtM73JuVLe92oXGCyNnT",
-  USDC: process.env.VITE_JUPITER_FEE_ACCOUNT_USDC || "EHJqU8SEg12muMp1pb6KH4ghn4UB6rA51KYARetKdAgr"
+  WSOL: process.env.VITE_JUPITER_FEE_ACCOUNT_WSOL || "",
+  USDC: process.env.VITE_JUPITER_FEE_ACCOUNT_USDC || ""
 };
 
 export default async function handler(req, res) {

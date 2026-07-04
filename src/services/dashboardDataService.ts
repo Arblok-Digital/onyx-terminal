@@ -168,92 +168,8 @@ export async function getDashboardData(tokenAddress: string): Promise<DashboardD
         },
     };
 
-    // Try to get AI Intelligence Report
-    try {
-        // Generate mock data for the analysis
-        const flowData: FlowAnalysis = {
-            token: tokenAddress,
-            patterns: [],
-            confidence: 0,
-            evidence: []
-        };
-
-        const onchainData: OnchainAnalysis = {
-            token: tokenAddress,
-            whaleActivity: {
-                largeTransfers: 0,
-                whaleWallets: 0,
-                concentration: 0
-            },
-            holderGrowth: {
-                newHolders: 0,
-                growthRate: 0
-            },
-            developerActivity: {
-                devWalletTransactions: 0,
-                suspiciousTransfers: 0,
-                devWalletBalance: 0,
-                devWallets: []
-            },
-            liquidityAnalysis: {
-                liquidityDepth: 0,
-                liquidityChange24h: 0,
-                lockedLiquidity: 0,
-                liquidityConcentration: 0
-            },
-            rugPullIndicators: {
-                dumpScore: 0,
-                liquidityRemovalScore: 0,
-                devWalletActivityScore: 0,
-                overallRugScore: 0
-            },
-            riskScore: 0
-        };
-
-        const marketData: MarketAnalysis = {
-            token: tokenAddress,
-            priceTrend: {
-                current: 0,
-                change24h: 0,
-                change7d: 0
-            },
-            volumeAnalysis: {
-                volume24h: 0,
-                volumeChange: 0
-            },
-            liquidityAnalysis: {
-                depth: 0,
-                slippage: 0
-            },
-            volatilityScore: 0,
-            sentimentAnalysis: {
-                sentimentScore: 0,
-                positiveMentions: 0,
-                negativeMentions: 0,
-                neutralMentions: 0,
-                sentimentTrend: 0,
-                source: 'n/a'
-            }
-        };
-
-        const report = await analyzeToken(tokenAddress, flowData, onchainData, marketData);
-        data.intelligence = {
-            recommendation: report.recommendation,
-            confidenceScore: report.confidenceScore,
-            executiveSummary: report.executiveSummary,
-            rugPullWarning: report.intelligenceRanking?.rating === 'AVOID' ? 'high' : 'low',
-            smartMoneyActivity: report.smartMoneyAnalysis ? 'active' : 'inactive',
-            narrativeStrength: report.narrativeAnalysis?.narrativeStrength?.toString() ?? '0',
-            opportunityScore: report.intelligenceRanking?.opportunityScore || 0,
-            keyInsights: report.keyInsights?.slice(0, 5).map((ki) =>
-                `[${ki.category || 'general'}] ${ki.insight} (${Math.round(ki.confidence * 100)}%)`
-            ) || [],
-        };
-        data.dataAvailability.hasIntelligence = true;
-    } catch (error: any) {
-        console.warn("[DashboardData] Failed to fetch intelligence report:", error);
-        data.intelligenceError = error.message || "Unknown AI analysis error";
-    }
+    // Intelligence report is NOT fetched automatically.
+    // Call getDashboardDataWithIntelligence() explicitly when needed (e.g. from chatbot).
 
     return data;
 }
@@ -360,6 +276,36 @@ export function formatDashboardContext(data: DashboardData): string {
     lines.push("=== END OF DASHBOARD DATA ===");
 
     return lines.join("\n");
+}
+
+/**
+ * Get dashboard data INCLUDING on-demand AI Intelligence analysis.
+ * This is the function to call explicitly from chatbot or user requests.
+ */
+export async function getDashboardDataWithIntelligence(tokenAddress: string): Promise<DashboardData> {
+    const data = await getDashboardData(tokenAddress);
+
+    try {
+        const report = await analyzeToken(tokenAddress);
+        data.intelligence = {
+            recommendation: report.recommendation,
+            confidenceScore: report.confidenceScore,
+            executiveSummary: report.executiveSummary,
+            rugPullWarning: report.intelligenceRanking?.rating === 'AVOID' ? 'high' : 'low',
+            smartMoneyActivity: report.smartMoneyAnalysis ? 'active' : 'inactive',
+            narrativeStrength: report.narrativeAnalysis?.narrativeStrength?.toString() ?? '0',
+            opportunityScore: report.intelligenceRanking?.opportunityScore || 0,
+            keyInsights: report.keyInsights?.slice(0, 5).map((ki) =>
+                `[${ki.category || 'general'}] ${ki.insight} (${Math.round(ki.confidence * 100)}%)`
+            ) || [],
+        };
+        data.dataAvailability.hasIntelligence = true;
+    } catch (error: any) {
+        console.warn("[DashboardData] Failed to fetch intelligence report:", error);
+        data.intelligenceError = error.message || "Unknown AI analysis error";
+    }
+
+    return data;
 }
 
 /**

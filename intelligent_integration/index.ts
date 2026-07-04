@@ -41,7 +41,9 @@ function getOrchestrator(): AgentOrchestrator {
  * Check if real API keys are available
  */
 export function hasRealApiKeys(): boolean {
-    return false; // Will be implemented with proper API key checking
+    const heliusKey = import.meta.env.VITE_HELIUS_API_KEY;
+    const openRouterKey = import.meta.env.VITE_OPENROUTER_API_KEY;
+    return !!(heliusKey || openRouterKey);
 }
 
 /**
@@ -49,6 +51,7 @@ export function hasRealApiKeys(): boolean {
  */
 export async function analyzeToken(
     token: string,
+    tokenSymbol: string = 'UNKNOWN',
     _flowData?: FlowAnalysis,
     _onchainData?: OnchainAnalysis,
     _marketData?: MarketAnalysis,
@@ -58,7 +61,7 @@ export async function analyzeToken(
     _survivalData?: SurvivalAnalysis
 ): Promise<IntelligenceReport> {
     const orch = getOrchestrator();
-    return orch.analyzeToken(token, 'UNKNOWN', 30);
+    return orch.analyzeToken(token, tokenSymbol, 30);
 }
 
 // Re-export Arkham Intelligence Service

@@ -55,7 +55,11 @@ container.bind<WebsocketService>(TOKENS.WebSocketService).to(WebsocketService);
 
 // ── Managers ────────────────────────────────────────────────────────────
 container.bind<AgentOrchestrator>(TOKENS.AgentOrchestrator).to(AgentOrchestrator);
-container.bind<AgentRouter>(TOKENS.AgentRouter).to(AgentRouter);
+// AgentRouter uses lazy binding to avoid circular dependency with agentOrchestrator
+container.bind<AgentRouter>(TOKENS.AgentRouter).toDynamicValue(() => {
+    const { AgentRouter } = require('./agentRouter');
+    return new AgentRouter(container.get<Logger>(TOKENS.Logger));
+});
 
 // ── Agents ──────────────────────────────────────────────────────────────
 container.bind<MarketAgent>(TOKENS.MarketAgent).to(MarketAgent);

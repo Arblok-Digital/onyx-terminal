@@ -1,9 +1,10 @@
 /**
  * @file Chart.module.css
  * @layer panel
- * @desc Chart panel styles. Header info bar + iframe full bleed.
+ * @desc Chart panel styles
  */
 
+/* ── Layout ──────────────────────────────────────────────────── */
 .body {
   display: flex;
   flex-direction: column;

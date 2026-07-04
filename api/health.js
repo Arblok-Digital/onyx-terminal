@@ -1,7 +1,7 @@
 /**
  * @file health.js
- * @desc Vercel serverless endpoint untuk mengecek status koneksi services.
- *       Mengecek: Supabase, OpenRouter, 9Router, Solana RPC.
+ * @desc Vercel serverless endpoint for checking all service connections.
+ *       Checks: Supabase, OpenRouter, 9Router, Solana RPC, Helius, Arkham, Jupiter.
  * @endpoint GET /api/health
  * @returns {object} { status, timestamp, services }
  */
@@ -11,6 +11,8 @@ const SUPABASE_ANON_KEY = process.env.VITE_SUPABASE_ANON_KEY || "";
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY || "";
 const NINE_ROUTER_API_KEY = process.env.VITE_NINE_ROUTER_API_KEY || "";
 const SOLANA_RPC = process.env.VITE_SOLANA_RPC_URL || "https://api.mainnet-beta.solana.com";
+const HELIUS_API_KEY = process.env.VITE_HELIUS_API_KEY || "";
+const ARKHAM_API_KEY = process.env.VITE_ARKHAM_API_KEY || "";
 
 export default async function handler(req, res) {
   // CORS Headers
@@ -24,6 +26,8 @@ export default async function handler(req, res) {
     openRouter: { status: "unknown", latency: null, error: null },
     nineRouter: { status: "unknown", latency: null, error: null },
     solanaRpc: { status: "unknown", latency: null, error: null },
+    helius: { status: "unknown", latency: null, error: null },
+    arkham: { status: "unknown", latency: null, error: null },
   };
 
   try {
@@ -36,11 +40,9 @@ export default async function handler(req, res) {
           signal: AbortSignal.timeout(5000),
         });
         const latency = Date.now() - supabaseStart;
-        if (supabaseResp.ok) {
-          results.supabase = { status: "connected", latency, error: null };
-        } else {
-          results.supabase = { status: "error", latency, error: `HTTP ${supabaseResp.status}` };
-        }
+        results.supabase = supabaseResp.ok
+          ? { status: "connected", latency, error: null }
+          : { status: "error", latency, error: `HTTP ${supabaseResp.status}` };
       } catch (err) {
         results.supabase = { status: "error", latency: Date.now() - supabaseStart, error: err.message };
       }
@@ -95,12 +97,7 @@ export default async function handler(req, res) {
         const solResp = await fetch(SOLANA_RPC, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            jsonrpc: "2.0",
-            id: 1,
-            method: "getHealth",
-            params: [],
-          }),
+          body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "getHealth", params: [] }),
           signal: AbortSignal.timeout(5000),
         });
         const latency = Date.now() - solStart;
@@ -113,6 +110,43 @@ export default async function handler(req, res) {
       } catch (err) {
         results.solanaRpc = { status: "error", latency: Date.now() - solStart, error: err.message };
       }
+    }
+
+    // ── Check Helius ──
+    if (HELIUS_API_KEY) {
+      const heliusStart = Date.now();
+      try {
+        const heliusResp = await fetch(`https://api.helius.xyz/v0/webhooks?apiKey=${HELIUS_API_KEY}`, {
+          signal: AbortSignal.timeout(5000),
+        });
+        const latency = Date.now() - heliusStart;
+        results.helius = heliusResp.ok
+          ? { status: "connected", latency, error: null }
+          : { status: "error", latency, error: `HTTP ${heliusResp.status}` };
+      } catch (err) {
+        results.helius = { status: "error", latency: Date.now() - heliusStart, error: err.message };
+      }
+    } else {
+      results.helius = { status: "skipped", latency: null, error: "No API key configured" };
+    }
+
+    // ── Check Arkham ──
+    if (ARKHAM_API_KEY) {
+      const arkhamStart = Date.now();
+      try {
+        const arkhamResp = await fetch("https://api.arkhamintelligence.com/health", {
+          headers: { "API-Key": ARKHAM_API_KEY },
+          signal: AbortSignal.timeout(5000),
+        });
+        const latency = Date.now() - arkhamStart;
+        results.arkham = arkhamResp.ok
+          ? { status: "connected", latency, error: null }
+          : { status: "error", latency, error: `HTTP ${arkhamResp.status}` };
+      } catch (err) {
+        results.arkham = { status: "error", latency: Date.now() - arkhamStart, error: err.message };
+      }
+    } else {
+      results.arkham = { status: "skipped", latency: null, error: "No API key configured" };
     }
 
     // ── Determine overall status ──

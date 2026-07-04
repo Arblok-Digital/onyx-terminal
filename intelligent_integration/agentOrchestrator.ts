@@ -5,11 +5,16 @@
 
 import { injectable } from 'inversify';
 import { TOKENS } from './core/diTokens';
+import { CircuitBreaker, CircuitBreakerError } from './core/circuitBreaker';
 
 // Lazy container getter to avoid circular dependency
-const getContainer = () => {
-    const { container } = require('./core/inversify.config');
-    return container;
+let _container: any = null;
+const getContainer = async () => {
+    if (!_container) {
+        const mod = await import('./core/inversify.config');
+        _container = mod.container;
+    }
+    return _container;
 };
 import { FlowIntelligenceAgent } from './agents/flowIntelligenceAgent';
 import { OnchainAgent } from './agents/onchainAgent';
@@ -32,6 +37,55 @@ import {
     SurvivalAnalysis
 } from './types/analysisTypes';
 
+// ── Retry Config ─────────────────────────────────────────
+
+export interface RetryConfig {
+    maxRetries: number;
+    baseDelayMs: number;
+    maxDelayMs: number;
+}
+
+const DEFAULT_RETRY: RetryConfig = {
+    maxRetries: 3,
+    baseDelayMs: 1000,
+    maxDelayMs: 10000,
+};
+
+/**
+ * Execute an async function with exponential backoff + jitter.
+ * Throws the last error if all retries are exhausted.
+ */
+async function withRetry<T>(
+    fn: () => Promise<T>,
+    label: string,
+    config: RetryConfig = DEFAULT_RETRY,
+): Promise<T> {
+    let lastError: unknown;
+    for (let attempt = 0; attempt <= config.maxRetries; attempt++) {
+        try {
+            return await fn();
+        } catch (err) {
+            lastError = err;
+            // Don't retry circuit breaker rejection (circuit is OPEN)
+            if (err instanceof CircuitBreakerError) throw err;
+
+            if (attempt < config.maxRetries) {
+                const delay = Math.min(
+                    config.baseDelayMs * Math.pow(2, attempt) + Math.random() * 500,
+                    config.maxDelayMs,
+                );
+                console.warn(
+                    `[Retry] ${label} attempt ${attempt + 1}/${config.maxRetries + 1} failed, retrying in ${Math.round(delay)}ms`,
+                );
+                await new Promise(r => setTimeout(r, delay));
+            }
+        }
+    }
+    throw lastError;
+}
+
+// ── Orchestrator ─────────────────────────────────────────
+
 @injectable()
 export class AgentOrchestrator {
     private _flowAgent?: FlowIntelligenceAgent;
@@ -45,75 +99,88 @@ export class AgentOrchestrator {
     protected onyxService?: OnyxOnChainService;
     protected analysisCache: Map<string, { report: IntelligenceReport; timestamp: number }>;
     protected cacheTTL: number = 3600000; // 1 hour
+    protected circuitBreaker: CircuitBreaker;
 
     constructor(connection?: Connection) {
-        // NO container.get() calls here to avoid circular dependency
         this.analysisCache = new Map();
+        this.circuitBreaker = new CircuitBreaker('AgentOrchestrator', {
+            failureThreshold: 5,
+            resetTimeoutMs: 30000,
+        });
+
         if (connection) {
             this.onyxService = new OnyxOnChainService(connection);
             console.log('[AgentOrchestrator] OnyxOnChainService initialized');
         }
     }
 
-    // Lazy getters - resolve agents only when accessed
-    protected get flowAgent(): FlowIntelligenceAgent {
+    // Lazy getters — now async since getContainer() returns a Promise
+    protected async getFlowAgent(): Promise<FlowIntelligenceAgent> {
         if (!this._flowAgent) {
-            this._flowAgent = getContainer().get<FlowIntelligenceAgent>(TOKENS.FlowIntelligenceAgent);
+            const container = await getContainer();
+            this._flowAgent = container.get(TOKENS.FlowIntelligenceAgent) as FlowIntelligenceAgent;
         }
-        return this._flowAgent;
+        return this._flowAgent!;
     }
 
-    protected get onchainAgent(): OnchainAgent {
+    protected async getOnchainAgent(): Promise<OnchainAgent> {
         if (!this._onchainAgent) {
-            this._onchainAgent = getContainer().get<OnchainAgent>(TOKENS.OnchainAgent);
+            const container = await getContainer();
+            this._onchainAgent = container.get(TOKENS.OnchainAgent) as OnchainAgent;
         }
-        return this._onchainAgent;
+        return this._onchainAgent!;
     }
 
-    protected get marketAgent(): MarketAgent {
+    protected async getMarketAgent(): Promise<MarketAgent> {
         if (!this._marketAgent) {
-            this._marketAgent = getContainer().get<MarketAgent>(TOKENS.MarketAgent);
+            const container = await getContainer();
+            this._marketAgent = container.get(TOKENS.MarketAgent) as MarketAgent;
         }
-        return this._marketAgent;
+        return this._marketAgent!;
     }
 
-    protected get opportunityAgent(): OpportunityAgent {
+    protected async getOpportunityAgent(): Promise<OpportunityAgent> {
         if (!this._opportunityAgent) {
-            this._opportunityAgent = getContainer().get<OpportunityAgent>(TOKENS.OpportunityAgent);
+            const container = await getContainer();
+            this._opportunityAgent = container.get(TOKENS.OpportunityAgent) as OpportunityAgent;
         }
-        return this._opportunityAgent;
+        return this._opportunityAgent!;
     }
 
-    protected get narrativeAgent(): NarrativeAgent {
+    protected async getNarrativeAgent(): Promise<NarrativeAgent> {
         if (!this._narrativeAgent) {
-            this._narrativeAgent = getContainer().get<NarrativeAgent>(TOKENS.NarrativeAgent);
+            const container = await getContainer();
+            this._narrativeAgent = container.get(TOKENS.NarrativeAgent) as NarrativeAgent;
         }
-        return this._narrativeAgent;
+        return this._narrativeAgent!;
     }
 
-    protected get smartMoneyAgent(): SmartMoneyAgent {
+    protected async getSmartMoneyAgent(): Promise<SmartMoneyAgent> {
         if (!this._smartMoneyAgent) {
-            this._smartMoneyAgent = getContainer().get<SmartMoneyAgent>(TOKENS.SmartMoneyAgent);
+            const container = await getContainer();
+            this._smartMoneyAgent = container.get(TOKENS.SmartMoneyAgent) as SmartMoneyAgent;
         }
-        return this._smartMoneyAgent;
+        return this._smartMoneyAgent!;
     }
 
-    protected get survivalAgent(): SurvivalAgent {
+    protected async getSurvivalAgent(): Promise<SurvivalAgent> {
         if (!this._survivalAgent) {
-            this._survivalAgent = getContainer().get<SurvivalAgent>(TOKENS.SurvivalAgent);
+            const container = await getContainer();
+            this._survivalAgent = container.get(TOKENS.SurvivalAgent) as SurvivalAgent;
         }
-        return this._survivalAgent;
+        return this._survivalAgent!;
     }
 
-    protected get researchManager(): OpenRouterResearchManager {
+    protected async getResearchManager(): Promise<OpenRouterResearchManager> {
         if (!this._researchManager) {
-            this._researchManager = getContainer().get<OpenRouterResearchManager>(TOKENS.OpenRouterService);
+            const container = await getContainer();
+            this._researchManager = container.get(TOKENS.OpenRouterService) as OpenRouterResearchManager;
         }
-        return this._researchManager;
+        return this._researchManager!;
     }
 
     /**
-     * Analyze a token using all available agents
+     * Analyze a token using all available agents with retry logic.
      */
     async analyzeToken(
         tokenAddress: string,
@@ -126,42 +193,77 @@ export class AgentOrchestrator {
             return cachedReport;
         }
 
-        try {
-            // Run core agents first (independent)
-            const [flowAnalysis, onchainAnalysis, marketAnalysis] = await Promise.all([
-                this.flowAgent.analyzeToken(tokenAddress, durationMinutes),
-                this.onchainAgent.analyzeToken(tokenAddress),
-                this.marketAgent.analyzeToken(tokenAddress)
-            ]);
-
-            // Run dependent agents (require results from core agents)
-            const [earlyOpportunityAnalysis, narrativeAnalysis, smartMoneyAnalysis, survivalAnalysis] =
-                await Promise.all([
-                    this.opportunityAgent.analyzeToken(tokenAddress, flowAnalysis, onchainAnalysis, marketAnalysis),
-                    this.narrativeAgent.analyzeToken(tokenAddress, tokenSymbol, onchainAnalysis, marketAnalysis),
-                    this.smartMoneyAgent.analyzeToken(tokenAddress, onchainAnalysis, flowAnalysis),
-                    this.survivalAgent.analyzeToken(tokenAddress, onchainAnalysis, marketAnalysis, flowAnalysis)
+        // Wrap entire analysis in circuit breaker
+        return this.circuitBreaker.call(async () => {
+            try {
+                // Resolve agents lazily
+                const [flowAgent, onchainAgent, marketAgent] = await Promise.all([
+                    this.getFlowAgent(),
+                    this.getOnchainAgent(),
+                    this.getMarketAgent(),
                 ]);
 
-            // Generate comprehensive intelligence report
-            const report = await this.researchManager.generateIntelligenceReport(
-                flowAnalysis,
-                onchainAnalysis,
-                marketAnalysis,
-                earlyOpportunityAnalysis,
-                narrativeAnalysis,
-                smartMoneyAnalysis,
-                survivalAnalysis
-            );
+                // Core agents (independent) — each with retry
+                const [flowAnalysis, onchainAnalysis, marketAnalysis] = await Promise.all([
+                    withRetry(() => flowAgent.analyzeToken(tokenAddress, durationMinutes), 'FlowAgent'),
+                    withRetry(() => onchainAgent.analyzeToken(tokenAddress), 'OnchainAgent'),
+                    withRetry(() => marketAgent.analyzeToken(tokenAddress), 'MarketAgent'),
+                ]);
 
-            // Cache the report
-            this.cacheReport(tokenAddress, report);
+                // Resolve dependent agents
+                const [opportunityAgent, narrativeAgent, smartMoneyAgent, survivalAgent] = await Promise.all([
+                    this.getOpportunityAgent(),
+                    this.getNarrativeAgent(),
+                    this.getSmartMoneyAgent(),
+                    this.getSurvivalAgent(),
+                ]);
 
-            return report;
-        } catch (error) {
-            console.error('Error in agent orchestration:', error);
-            return this.createErrorReport(tokenAddress, tokenSymbol, error);
-        }
+                // Dependent agents — each with retry
+                const [earlyOpportunityAnalysis, narrativeAnalysis, smartMoneyAnalysis, survivalAnalysis] =
+                    await Promise.all([
+                        withRetry(
+                            () => opportunityAgent.analyzeToken(tokenAddress, flowAnalysis, onchainAnalysis, marketAnalysis),
+                            'OpportunityAgent'
+                        ),
+                        withRetry(
+                            () => narrativeAgent.analyzeToken(tokenAddress, tokenSymbol, onchainAnalysis, marketAnalysis),
+                            'NarrativeAgent'
+                        ),
+                        withRetry(
+                            () => smartMoneyAgent.analyzeToken(tokenAddress, onchainAnalysis, flowAnalysis),
+                            'SmartMoneyAgent'
+                        ),
+                        withRetry(
+                            () => survivalAgent.analyzeToken(tokenAddress, onchainAnalysis, marketAnalysis, flowAnalysis),
+                            'SurvivalAgent'
+                        ),
+                    ]);
+
+                // Resolve research manager
+                const researchManager = await this.getResearchManager();
+
+                // Generate final report with retry
+                const report = await withRetry(
+                    () => researchManager.generateIntelligenceReport(
+                        flowAnalysis,
+                        onchainAnalysis,
+                        marketAnalysis,
+                        earlyOpportunityAnalysis,
+                        narrativeAnalysis,
+                        smartMoneyAnalysis,
+                        survivalAnalysis
+                    ),
+                    'ResearchManager'
+                );
+
+                // Cache and return
+                this.cacheReport(tokenAddress, report);
+                return report;
+            } catch (error: any) {
+                console.error('[AgentOrchestrator] Analysis failed after retries:', error);
+                return this.createErrorReport(tokenAddress, tokenSymbol, error);
+            }
+        });
     }
 
     /**
@@ -179,9 +281,6 @@ export class AgentOrchestrator {
         );
     }
 
-    /**
-     * Get cached intelligence report
-     */
     private getCachedReport(tokenAddress: string): IntelligenceReport | null {
         const cached = this.analysisCache.get(tokenAddress);
         if (cached && Date.now() - cached.timestamp < this.cacheTTL) {
@@ -190,9 +289,6 @@ export class AgentOrchestrator {
         return null;
     }
 
-    /**
-     * Cache intelligence report
-     */
     protected cacheReport(tokenAddress: string, report: IntelligenceReport): void {
         this.analysisCache.set(tokenAddress, {
             report,
@@ -200,9 +296,6 @@ export class AgentOrchestrator {
         });
     }
 
-    /**
-     * Create error report when analysis fails
-     */
     protected createErrorReport(
         tokenAddress: string,
         tokenSymbol: string = 'UNKNOWN',
@@ -352,23 +445,14 @@ export class AgentOrchestrator {
         };
     }
 
-    /**
-     * Clear cache for a specific token
-     */
     clearTokenCache(tokenAddress: string): void {
         this.analysisCache.delete(tokenAddress);
     }
 
-    /**
-     * Clear all cached reports
-     */
     clearAllCache(): void {
         this.analysisCache.clear();
     }
 
-    /**
-     * Get current cache size
-     */
     getCacheSize(): number {
         return this.analysisCache.size;
     }

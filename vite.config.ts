@@ -115,7 +115,7 @@ export default defineConfig({
         "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
         "img-src 'self' data: blob: https://*.dexscreener.com https://arweave.net https://*.arweave.net https://img-v2.galxy.io",
         "font-src 'self' https://fonts.gstatic.com https://fonts.googleapis.com",
-        "connect-src 'self' http://localhost:3001 ws://localhost:3001 https://api.dexscreener.com https://quote-api.jup.ag https://api.jup.ag https://*.supabase.co wss://*.supabase.co https://openrouter.ai https://api.9router.com https://api.mainnet-beta.solana.com https://api.devnet.solana.com https://api.testnet.solana.com https://*.solana.com wss://*.solana.com wss://api.devnet.solana.com https://fonts.googleapis.com wss://fonts.googleapis.com",
+        "connect-src 'self' http://localhost:3001 ws://localhost:3001 http://localhost:20128 https://api.dexscreener.com https://quote-api.jup.ag https://api.jup.ag https://*.supabase.co wss://*.supabase.co https://openrouter.ai https://api.9router.com https://api.mainnet-beta.solana.com https://api.devnet.solana.com https://api.testnet.solana.com https://*.solana.com wss://*.solana.com wss://api.devnet.solana.com https://*.helius-rpc.com wss://*.helius-rpc.com https://fonts.googleapis.com wss://fonts.googleapis.com",
         "frame-src 'self' https://*.walletconnect.com https://*.solflare.com https://*.phantom.app https://www.geckoterminal.com",
         "manifest-src 'self'",
         "worker-src 'self' blob:",

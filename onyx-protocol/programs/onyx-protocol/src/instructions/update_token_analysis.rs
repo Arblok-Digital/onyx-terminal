@@ -69,13 +69,13 @@ pub fn handler(ctx: Context<UpdateTokenAnalysis>, params: UpdateTokenAnalysisPar
     let analysis = &mut ctx.accounts.token_analysis;
 
     // Validate score ranges (0-10000 for basis-point fields)
-    require!(params.holder_concentration <= 10000, ErrorCode::InvalidScore);
-    require!(params.liquidity_concentration <= 10000, ErrorCode::InvalidScore);
-    require!(params.dump_score <= 10000, ErrorCode::InvalidScore);
-    require!(params.liquidity_removal_score <= 10000, ErrorCode::InvalidScore);
-    require!(params.dev_activity_score <= 10000, ErrorCode::InvalidScore);
-    require!(params.overall_rug_score <= 10000, ErrorCode::InvalidScore);
-    require!(params.risk_score <= 10000, ErrorCode::InvalidScore);
+    require!(params.holder_concentration <= MAX_SCORE, ErrorCode::InvalidScore);
+    require!(params.liquidity_concentration <= MAX_SCORE, ErrorCode::InvalidScore);
+    require!(params.dump_score <= MAX_SCORE, ErrorCode::InvalidScore);
+    require!(params.liquidity_removal_score <= MAX_SCORE, ErrorCode::InvalidScore);
+    require!(params.dev_activity_score <= MAX_SCORE, ErrorCode::InvalidScore);
+    require!(params.overall_rug_score <= MAX_SCORE, ErrorCode::InvalidScore);
+    require!(params.risk_score <= MAX_SCORE, ErrorCode::InvalidScore);
 
     // Whale Activity
     analysis.large_transfers = params.large_transfers;

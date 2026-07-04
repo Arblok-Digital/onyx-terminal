@@ -44,6 +44,15 @@ pub fn handler(ctx: Context<InitTokenAnalysis>, mint: Pubkey) -> Result<()> {
     analysis.bump = ctx.bumps.token_analysis;
     analysis.analysis_timestamp = Clock::get()?.unix_timestamp;
 
+    // Initialize score fields to zero
+    analysis.holder_concentration = 0;
+    analysis.liquidity_concentration = 0;
+    analysis.dump_score = 0;
+    analysis.liquidity_removal_score = 0;
+    analysis.dev_activity_score = 0;
+    analysis.overall_rug_score = 0;
+    analysis.risk_score = 0;
+
     // Increment analysis counter
     config.analysis_count = config.analysis_count
         .checked_add(1)

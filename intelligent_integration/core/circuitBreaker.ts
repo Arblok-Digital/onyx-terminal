@@ -41,6 +41,17 @@ export interface CircuitBreakerStats {
     options: CircuitBreakerOptions;
 }
 
+type CircuitBreakerEvent = 'stateChange' | 'failure' | 'success' | 'reset';
+
+type CircuitBreakerListener = (event: {
+    type: CircuitBreakerEvent;
+    name: string;
+    state: CircuitState;
+    failureCount: number;
+    successCount: number;
+    timestamp: string;
+}) => void;
+
 /**
  * Circuit Breaker for AI provider calls.
  *
@@ -59,10 +70,22 @@ export class CircuitBreaker {
     private lastSuccess: string | null = null;
     private openedAt: string | null = null;
     private halfOpenAttempted = false;
+    private listeners: CircuitBreakerListener[] = [];
 
     constructor(name: string, options?: Partial<CircuitBreakerOptions>) {
         this.name = name;
         this.options = { ...DEFAULT_OPTIONS, ...options };
+    }
+
+    /**
+     * Subscribe to circuit breaker events (stateChange, failure, success, reset).
+     * Returns an unsubscribe function.
+     */
+    onEvent(listener: CircuitBreakerListener): () => void {
+        this.listeners.push(listener);
+        return () => {
+            this.listeners = this.listeners.filter(l => l !== listener);
+        };
     }
 
     /**
@@ -91,7 +114,7 @@ export class CircuitBreaker {
     }
 
     /**
-     * Get current stats for monitoring/logging.
+     * Get current stats for monitoring/logging - returns serializable snapshot.
      */
     getStats(): CircuitBreakerStats {
         return {
@@ -107,25 +130,71 @@ export class CircuitBreaker {
     }
 
     /**
+     * Get the current state (lightweight, no allocation).
+     */
+    getState(): CircuitState {
+        return this.state;
+    }
+
+    /**
+     * Get aggregated metrics summary for Prometheus/health check.
+     */
+    getMetrics(): Record<string, number | string> {
+        return {
+            name: this.name,
+            state: this.state,
+            failureCount: this.failureCount,
+            successCount: this.successCount,
+            totalCalls: this.failureCount + this.successCount,
+            failureRate: this.failureCount + this.successCount > 0
+                ? Math.round((this.failureCount / (this.failureCount + this.successCount)) * 100)
+                : 0,
+            isOpen: this.state === 'OPEN' ? 1 : 0,
+        };
+    }
+
+    /**
      * Manually reset the circuit to CLOSED state.
      */
     reset(): void {
+        const prevState = this.state;
         this.state = 'CLOSED';
         this.failureCount = 0;
         this.lastFailure = null;
         this.openedAt = null;
         this.halfOpenAttempted = false;
+        this.emit('reset', prevState);
     }
 
     /**
      * Manually trip the circuit to OPEN state.
      */
     trip(): void {
+        const prevState = this.state;
         this.state = 'OPEN';
         this.openedAt = new Date().toISOString();
+        this.emit('stateChange', prevState);
     }
 
     // ── Private ──────────────────────────────────────────────
+
+    private emit(eventType: CircuitBreakerEvent, previousState?: CircuitState): void {
+        const event = {
+            type: eventType,
+            name: this.name,
+            state: this.state,
+            failureCount: this.failureCount,
+            successCount: this.successCount,
+            timestamp: new Date().toISOString(),
+        };
+        for (const listener of this.listeners) {
+            try {
+                listener(event);
+            } catch (e) {
+                console.error(`[CircuitBreaker] Listener error for ${this.name}:`, e);
+            }
+        }
+    }
 
     private onSuccess(): void {
         this.successCount++;
@@ -137,7 +206,9 @@ export class CircuitBreaker {
             this.state = 'CLOSED';
             this.failureCount = 0;
             this.openedAt = null;
+            this.emit('stateChange', 'HALF_OPEN');
         }
+        this.emit('success');
     }
 
     private onFailure(): void {
@@ -149,13 +220,16 @@ export class CircuitBreaker {
             this.state = 'OPEN';
             this.openedAt = new Date().toISOString();
             this.halfOpenAttempted = false;
+            this.emit('stateChange', 'HALF_OPEN');
             return;
         }
 
         if (this.failureCount >= this.options.failureThreshold) {
             this.state = 'OPEN';
             this.openedAt = new Date().toISOString();
+            this.emit('stateChange', 'CLOSED');
         }
+        this.emit('failure');
     }
 
     private checkHalfOpen(): void {

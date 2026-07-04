@@ -5,4 +5,4 @@
 
 export * from './types/analysisTypes';
 
-export function analyzeToken(tokenAddress: string): Promise<any>;
+export function analyzeToken(tokenAddress: string, tokenSymbol?: string): Promise<any>;

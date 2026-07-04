@@ -15,6 +15,11 @@ export interface AgentConfig {
     cacheTTL: number;
     retries: number;
     fallbackAgents?: string[];
+
+    // V2 backward-compat fields (used by agentRouter.ts)
+    model?: string;
+    endpoint?: string;
+    priority?: number;
 }
 
 export interface AgentState {

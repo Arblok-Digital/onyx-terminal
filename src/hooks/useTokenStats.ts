@@ -48,13 +48,19 @@ export function useTokenStats(address?: string) {
           const supplyData = await supplyRes.json();
           const holdersData = await largestAccountsRes.json();
 
-          const totalSupply = parseFloat(supplyData.result?.value?.amount || "0");
+          const supplyValue = supplyData.result?.value;
+          const supplyAmount = parseFloat(supplyValue?.amount || "0");
+          const decimals = supplyValue?.decimals ?? 0;
+          const totalSupply = supplyAmount / Math.pow(10, decimals);
           const largestAccounts = holdersData.result?.value || [];
           
           // Hitung distribusi Top 10 secara on-chain
           const top10Supply = largestAccounts
             .slice(0, 10)
-            .reduce((sum: number, acc: any) => sum + parseFloat(acc.amount), 0);
+            .reduce((sum: number, acc: any) => {
+              const accDecimals = acc.decimals ?? decimals;
+              return sum + (parseFloat(acc.amount) / Math.pow(10, accDecimals));
+            }, 0);
 
           const distributionRatio = totalSupply > 0 ? (top10Supply / totalSupply) * 100 : 0;
 

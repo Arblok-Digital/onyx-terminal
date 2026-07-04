@@ -9,13 +9,13 @@
  * @deps ui/Panel, hooks/usePrice, core/store/ui.store, utils/format,
  *       utils/chain, panels/info/info.config
  */
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import Panel from "@/ui/Panel";
 import { useUIStore } from "@/core/store/ui.store";
 import ShareButton from "@/components/ShareButton";
-import { useOnyxProgram } from "@/hooks/useOnyxProgram";
 import { useTokenStats } from "@/hooks/useTokenStats";
 import { usePriceFor } from "@/hooks/usePrice";
+import { ShimmerInfo } from "@/components/ui/shimmer";
 import {
   formatPrice,
   formatPercent,
@@ -62,41 +62,6 @@ function getTxns(snap: TokenSnapshot, k: BucketKey): TxnBucket | undefined {
   }
 }
 
-// ============================================================================
-// DEBUGGER COMPONENT
-// ============================================================================
-function OnyxStatusDebugger() {
-  const { program, connected } = useOnyxProgram();
-
-  useEffect(() => {
-    console.log("ONYX DEBUGGER: Hook loaded.");
-    console.log("ONYX DEBUGGER: Wallet connected:", connected);
-
-    if (program && connected) {
-      console.log("ONYX DEBUGGER: Program client available. Fetching config...");
-      program.getConfig()
-        .then(config => {
-          if (config) {
-            console.log("✅ ONYX DEBUGGER: Config fetched successfully!", config);
-          } else {
-            console.error("❌ ONYX DEBUGGER: Failed to fetch config. Account is null.");
-          }
-        })
-        .catch(err => {
-          console.error("❌ ONYX DEBUGGER: Error fetching config:", err);
-        });
-    } else if (!connected) {
-      console.warn("ONYX DEBUGGER: Wallet not connected. Cannot fetch config.");
-    }
-  }, [program, connected]);
-
-  return (
-    <div style={{ position: 'absolute', bottom: 0, left: 0, background: 'rgba(0,0,0,0.5)', color: 'white', padding: '4px', fontSize: '10px', zIndex: 999 }}>
-      Onyx Debugger Active
-    </div>
-  );
-}
-// ============================================================================
 
 function CopyBtn({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
@@ -178,9 +143,7 @@ export default function Info() {
   if (!snap) {
     return (
       <Panel id="info" title="Info">
-        <div className={styles.empty}>
-          <div className={styles.emptyHint}>Loading…</div>
-        </div>
+        <ShimmerInfo />
       </Panel>
     );
   }
@@ -198,7 +161,6 @@ export default function Info() {
   return (
     <Panel id="info" title={`${snap.symbol} · INFO`}>
       <div className={styles.body}>
-        <OnyxStatusDebugger />
         {/* OVERVIEW */}
         <Section title="Overview">
           <div className={styles.heroBox}>

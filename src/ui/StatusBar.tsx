@@ -2,6 +2,7 @@
  * @file StatusBar.tsx
  * @layer ui
  * @desc Bottom status bar — chain selector, connection state, latency, clock.
+ *       No more dummy data — uses real store metrics.
  * @exposes default StatusBar
  * @deps core/store/ui.store, core/store/price.store, utils/time
  */
@@ -22,6 +23,7 @@ export default function StatusBar() {
   const latencyMs = useUIStore((s) => s.latencyMs);
   const online = usePriceStore((s) => s.online);
   const lastRefresh = usePriceStore((s) => s.lastRefreshAt);
+  const activeTokenCount = usePriceStore((s) => Object.keys(s.tokens).length);
 
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
@@ -41,11 +43,6 @@ export default function StatusBar() {
       : status === "degraded"
         ? styles.dotDegraded
         : styles.dotOffline;
-
-  // Dummy live metrics yang berfluktuasi berdasarkan state 'now'
-  const dummyUsers = 1240 + (Math.floor(now / 15000) % 45);
-  const dummyTrades = 48200 + (Math.floor(now / 5000) % 210);
-  const dummyVol = 12450000 + (Math.floor(now / 2000) % 9500);
 
   return (
     <div className={styles.bar} role="status">
@@ -90,21 +87,13 @@ export default function StatusBar() {
       <div className={styles.divider} />
 
       <div className={styles.cell}>
-        <span className={styles.label}>Users</span>
-        <span className={styles.value} style={{ color: '#2ecc71' }}>{formatCompact(dummyUsers)}</span>
+        <span className={styles.label}>Tokens</span>
+        <span className={styles.value} style={{ color: '#2ecc71' }}>
+          {formatCompact(activeTokenCount)}
+        </span>
       </div>
 
-      <div className={styles.cell}>
-        <span className={styles.label}>Trades</span>
-        <span className={styles.value}>{formatCompact(dummyTrades)}</span>
-      </div>
-
-      <div className={styles.cell}>
-        <span className={styles.label}>24h Vol</span>
-        <span className={styles.value} style={{ color: '#3b82f6' }}>{formatUsd(dummyVol)}</span>
-      </div>
-
-      <div className={styles.spacer} />
+      <div className={styles.divider} />
 
       <div className={styles.help}>
         Drag panel header to move

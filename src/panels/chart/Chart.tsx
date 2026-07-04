@@ -14,8 +14,6 @@ import { bus } from "@/core/event-bus";
 import ChartEmbed from "./ChartEmbed";
 import { DEFAULT_CHART_OPTIONS, RESOLUTIONS } from "./chart.config";
 import { formatPrice, formatPercent, formatCompact } from "@/utils/format";
-import { analyzeToken } from "@intelligent_integration";
-import IntelligenceReportView from "./IntelligenceReportView";
 import styles from "./Chart.module.css";
 import type { ChartEmbedOptions } from "@/feeds/geckoterminal";
 
@@ -26,10 +24,6 @@ export default function Chart() {
   const [resolution, setResolution] = useState<ChartEmbedOptions["resolution"]>(
     DEFAULT_CHART_OPTIONS.resolution,
   );
-  const [activeTab, setActiveTab] = useState<"chart" | "intelligence">("chart");
-  const [intelligenceReport, setIntelligenceReport] = useState<any | null>(null);
-  const [isLoadingIntelligence, setIsLoadingIntelligence] = useState(false);
-  const [intelligenceError, setIntelligenceError] = useState<string | null>(null);
 
   useEffect(() => {
     const handler = (
@@ -40,49 +34,10 @@ export default function Chart() {
         chainId: payload.chain as never,
         symbol: payload.symbol,
       });
-      // Reset to chart tab when token changes
-      setActiveTab("chart");
     };
     bus.on("token:select", handler);
     return () => bus.off("token:select", handler);
   }, [setActiveToken]);
-
-  // Fetch intelligence report when active token changes
-  useEffect(() => {
-    if (!activeToken?.address) {
-      setIntelligenceReport(null);
-      return;
-    }
-
-    let isMounted = true;
-    const fetchIntelligence = async () => {
-      setIsLoadingIntelligence(true);
-      setIntelligenceError(null);
-      try {
-        console.log("[Chart] Fetching intelligence report for:", activeToken.address);
-        const report = await analyzeToken(activeToken.address);
-        console.log("[Chart] Received intelligence report:", report);
-        if (isMounted) {
-          setIntelligenceReport(report);
-        }
-      } catch (error) {
-        if (isMounted) {
-          setIntelligenceError("Failed to load intelligence report");
-          console.error("Intelligence analysis error:", error);
-        }
-      } finally {
-        if (isMounted) {
-          setIsLoadingIntelligence(false);
-        }
-      }
-    };
-
-    fetchIntelligence();
-
-    return () => {
-      isMounted = false;
-    };
-  }, [activeToken]);
 
   const ch1 = snap?.priceChange1h;
   const ch24 = snap?.priceChange24h;
@@ -152,78 +107,34 @@ export default function Chart() {
             </>
           ) : (
             <div className={styles.muted} style={{ fontSize: 12 }}>
-              Pilih token dari watchlist —&gt;
+              Pilih token dari watchlist &rarr;
             </div>
           )}
 
           <div className={styles.spacer} />
 
           <div className={styles.resBar}>
-            <button
-              className={[
-                styles.resBtn,
-                activeTab === "chart" ? styles.resBtnActive : "",
-              ].join(" ")}
-              onClick={() => setActiveTab("chart")}
-            >
-              CHART
-            </button>
-            <button
-              className={[
-                styles.resBtn,
-                activeTab === "intelligence" ? styles.resBtnActive : "",
-              ].join(" ")}
-              onClick={() => setActiveTab("intelligence")}
-              disabled={false}
-            >
-              {isLoadingIntelligence ? "ANALYZING..." : "INTELLIGENCE"}
-            </button>
-            {activeTab === "chart" && (
-              <>
-                {RESOLUTIONS.map((r) => (
-                  <button
-                    key={r.id}
-                    className={[
-                      styles.resBtn,
-                      resolution === r.id ? styles.resBtnActive : "",
-                    ].join(" ")}
-                    onClick={() => setResolution(r.id)}
-                  >
-                    {r.label}
-                  </button>
-                ))}
-              </>
-            )}
+            {RESOLUTIONS.map((r) => (
+              <button
+                key={r.id}
+                className={[
+                  styles.resBtn,
+                  resolution === r.id ? styles.resBtnActive : "",
+                ].join(" ")}
+                onClick={() => setResolution(r.id)}
+              >
+                {r.label}
+              </button>
+            ))}
           </div>
         </div>
 
         {hasChart && snap?.pairAddress ? (
-          activeTab === "chart" ? (
-            <ChartEmbed
-              chain={snap.chain}
-              poolAddress={snap.pairAddress}
-              options={{ ...DEFAULT_CHART_OPTIONS, resolution }}
-            />
-          ) : (
-            <div className={styles.intelligenceContainer}>
-              {isLoadingIntelligence ? (
-                <div className={styles.loadingIntelligence}>
-                  <div className={styles.loader}></div>
-                  <div>Analyzing token with AMD Intelligence...</div>
-                </div>
-              ) : intelligenceError ? (
-                <div className={styles.intelligenceError}>
-                  {intelligenceError}
-                </div>
-              ) : intelligenceReport ? (
-                <IntelligenceReportView report={intelligenceReport} />
-              ) : (
-                <div className={styles.emptyIntelligence}>
-                  No intelligence data available
-                </div>
-              )}
-            </div>
-          )
+          <ChartEmbed
+            chain={snap.chain}
+            poolAddress={snap.pairAddress}
+            options={{ ...DEFAULT_CHART_OPTIONS, resolution }}
+          />
         ) : (
           <div className={styles.empty}>
             <div className={styles.emptyIcon}>◇</div>

@@ -13,6 +13,7 @@
 import { useEffect, useMemo, useState, useRef } from "react";
 import Panel from "@/ui/Panel";
 import { getLatestProfiles, getTokensBatch } from "@/feeds/dexscreener";
+import { ShimmerInfo } from "@/components/ui/shimmer";
 import ShareButton from "@/components/ShareButton";
 import type { TokenProfile } from "@/feeds/dexscreener";
 import { usePriceStore } from "@/core/store/price.store";
@@ -333,7 +334,11 @@ export default function Discover() {
             />
           )}
           {loading && rows.length === 0 && (
-            <div className={styles.empty}>Fetching latest tokens…</div>
+            <div className={styles.loadingWrap}>
+              <ShimmerInfo />
+              <ShimmerInfo />
+              <ShimmerInfo />
+            </div>
           )}
           {!loading && rows.length === 0 && (
             <div className={styles.empty}>
