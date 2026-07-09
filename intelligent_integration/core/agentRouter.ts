@@ -10,6 +10,7 @@ import { IntelligenceError } from './intelligenceErrors';
 import type { IntelligenceReport } from '../types/analysisTypes';
 import type { AgentConfig } from '../types/agentTypes';
 import { isOpenRouterEnabled } from '../models/openRouterModels';
+import { isNvidiaEnabled } from '../models/nvidiaModels';
 import { getEnv } from '../utils/getEnv';
 import { consoleLogger, type AgentLogger } from '../agents/agentUtils';
 
@@ -44,41 +45,33 @@ export class AgentRouter {
     /** Load agent configurations */
     private loadAgentConfigs(): AgentConfig[] {
         return [
+            // 🥇 NVIDIA NIM - Nemotron (PRIMARY - no local server needed)
             {
-                name: '9router-gateway',
-                model: getEnv('VITE_AI_MODEL', 'auto'),
-                endpoint: getEnv('VITE_AI_GATEWAY_URL', 'http://localhost:20128/v1'),
+                name: 'nvidia-nemotron-ultra-550b',
+                model: 'nvidia/nemotron-3-ultra-550b-a55b',
+                endpoint: getEnv('VITE_NVIDIA_ENDPOINT', 'https://integrate.api.nvidia.com/v1/chat/completions'),
                 priority: 1,
-                enabled: true,
-                weight: 1,
-                cacheTTL: 300_000,
-                retries: 2,
-            },
-            {
-                name: '9router-llama-3.1-70b',
-                model: 'llama-3.1-70b',
-                endpoint: getEnv('VITE_9ROUTER_LLAMA_ENDPOINT', 'https://api.9router.ai/v1/llama-3.1-70b'),
-                priority: 2,
-                enabled: true,
+                enabled: isNvidiaEnabled(),
                 weight: 0.95,
                 cacheTTL: 300_000,
                 retries: 2,
             },
             {
-                name: '9router-mistral-large-2',
-                model: 'mistral-large-2',
-                endpoint: getEnv('VITE_9ROUTER_MISTRAL_ENDPOINT', 'https://api.9router.ai/v1/mistral-large-2'),
-                priority: 3,
-                enabled: true,
+                name: 'nvidia-nemotron-super-120b',
+                model: 'nvidia/nemotron-3-super-120b-a12b',
+                endpoint: getEnv('VITE_NVIDIA_ENDPOINT', 'https://integrate.api.nvidia.com/v1/chat/completions'),
+                priority: 2,
+                enabled: isNvidiaEnabled(),
                 weight: 0.9,
                 cacheTTL: 300_000,
                 retries: 2,
             },
+            // 🥈 OpenRouter - Gemma 4 31B (FALLBACK)
             {
-                name: 'openrouter-deepseek-r1',
-                model: 'deepseek/deepseek-r1:free',
+                name: 'openrouter-gemma-4-31b',
+                model: 'google/gemma-4-31b-it:free',
                 endpoint: getEnv('VITE_OPENROUTER_ENDPOINT', 'https://openrouter.ai/api/v1/chat/completions'),
-                priority: 4,
+                priority: 3,
                 enabled: isOpenRouterEnabled(),
                 weight: 0.85,
                 cacheTTL: 300_000,
@@ -88,9 +81,40 @@ export class AgentRouter {
                 name: 'openrouter-llama-3.3-70b',
                 model: 'meta-llama/llama-3.3-70b-instruct:free',
                 endpoint: getEnv('VITE_OPENROUTER_ENDPOINT', 'https://openrouter.ai/api/v1/chat/completions'),
-                priority: 5,
+                priority: 4,
                 enabled: isOpenRouterEnabled(),
                 weight: 0.8,
+                cacheTTL: 300_000,
+                retries: 2,
+            },
+            // 🥉 9Router - butuh VPS (LAST RESORT)
+            {
+                name: '9router-gateway',
+                model: getEnv('VITE_AI_MODEL', 'auto'),
+                endpoint: getEnv('VITE_AI_GATEWAY_URL', 'http://localhost:20128/v1'),
+                priority: 5,
+                enabled: true,
+                weight: 0.75,
+                cacheTTL: 300_000,
+                retries: 2,
+            },
+            {
+                name: '9router-llama-3.1-70b',
+                model: 'llama-3.1-70b',
+                endpoint: getEnv('VITE_9ROUTER_LLAMA_ENDPOINT', 'https://api.9router.ai/v1/llama-3.1-70b'),
+                priority: 6,
+                enabled: true,
+                weight: 0.7,
+                cacheTTL: 300_000,
+                retries: 2,
+            },
+            {
+                name: '9router-mistral-large-2',
+                model: 'mistral-large-2',
+                endpoint: getEnv('VITE_9ROUTER_MISTRAL_ENDPOINT', 'https://api.9router.ai/v1/mistral-large-2'),
+                priority: 7,
+                enabled: true,
+                weight: 0.65,
                 cacheTTL: 300_000,
                 retries: 2,
             },
@@ -135,25 +159,39 @@ export class AgentRouter {
 
     /** Determine the best agent to use based on current conditions */
     private determineRouting(): RoutingDecision {
-        const has9RouterKey = !!getEnv('VITE_AI_GATEWAY_KEY', '');
-        if (has9RouterKey) {
+        // 🥇 NVIDIA NIM - Primary (no local server, always available)
+        if (isNvidiaEnabled()) {
             return {
-                primaryAgent: '9router-gateway',
-                reason: 'Using 9Router Gateway with auto-fallback',
+                primaryAgent: 'nvidia-nemotron-ultra-550b',
+                reason: 'Using NVIDIA NIM Nemotron Ultra 550B (primary)',
                 confidence: 0.95,
-                modelUsed: 'auto',
+                modelUsed: 'nvidia/nemotron-3-ultra-550b-a55b',
                 isFallback: false,
             };
         }
 
-        // Check OpenRouter availability
+        // 🥈 OpenRouter - Fallback
         if (isOpenRouterEnabled()) {
             return {
-                primaryAgent: 'openrouter-deepseek-r1',
-                reason: 'Using OpenRouter free models',
+                primaryAgent: 'openrouter-gemma-4-31b',
+                reason: 'Using OpenRouter Gemma 4 31B free (fallback)',
                 confidence: 0.9,
-                modelUsed: 'deepseek/deepseek-r1:free',
+                modelUsed: 'google/gemma-4-31b-it:free',
                 isFallback: false,
+            };
+        }
+
+        // 🥉 9Router - Last resort (needs local VPS)
+        // Check if 9Router gateway is reachable (non-localhost endpoint means VPS is set up)
+        const gatewayUrl = getEnv('VITE_AI_GATEWAY_URL', 'http://localhost:20128/v1');
+        const is9RouterAvailable = !gatewayUrl.includes('localhost') && !gatewayUrl.includes('127.0.0.1');
+        if (is9RouterAvailable) {
+            return {
+                primaryAgent: '9router-gateway',
+                reason: 'Using 9Router Gateway (needs VPS)',
+                confidence: 0.75,
+                modelUsed: 'auto',
+                isFallback: true,
             };
         }
 

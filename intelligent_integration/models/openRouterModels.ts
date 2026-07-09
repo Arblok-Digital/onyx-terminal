@@ -4,9 +4,14 @@
  * @desc OpenRouter free model configurations per task type.
  *       OpenRouter provides OpenAI-compatible API with access to many models.
  *       We assign specific models based on task requirements:
- *       - report:      DeepSeek R1 free (strong reasoning for multi-source synthesis)
- *       - attention:   Mistral 7B free (fast classification for velocity scoring)
- *       - conviction:  Qwen 2.5 7B free (numeric precision for scoring tasks)
+ *       - all tasks:   google/gemma-4-31b-it:free (verified working, strong reasoning)
+ *       - fallback:    meta-llama/llama-3.3-70b-instruct:free (widely available)
+ *
+ *       Models updated 2026-07-09:
+ *       - ❌ deepseek/deepseek-r1:free  → not free anymore
+ *       - ❌ mistralai/mistral-7b-instruct:free → not available
+ *       - ❌ qwen/qwen-2.5-7b-instruct:free → not free anymore
+ *       - ✅ google/gemma-4-31b-it:free → verified working
  *
  * @exposes OPENROUTER_MODELS, OPENROUTER_TASK_CONFIG, getOpenRouterModel
  */
@@ -48,52 +53,54 @@ export const OPENROUTER_TASK_CONFIG: Record<
 > = {
     /**
      * Report synthesis - combines 7 data sources into intelligence report.
-     * Needs: strong reasoning, long output, structured format.
-     * DeepSeek R1 = chain-of-thought reasoning, GPT-4 level for analysis tasks.
+     * Uses Google Gemma 4 31B (verified working, strong reasoning).
+     * Fallback: Llama 3.3 70B (widely available, good fallback).
      */
     report: {
-        primary: 'deepseek/deepseek-r1:free',
+        primary: 'google/gemma-4-31b-it:free',
         fallback: 'meta-llama/llama-3.3-70b-instruct:free',
         maxTokens: 4000,
         temperature: 0.3,
-        description: 'Multi-source intelligence report synthesis (7 data streams)',
+        description: 'Multi-source intelligence report synthesis (Gemma 4 31B)',
     },
 
     /**
      * Attention velocity scoring - classify social/volume/wallet growth.
-     * Needs: fast response, simple classification (score 0-100 + trend).
-     * Mistral 7B = low latency, good at classification tasks.
+     * Uses Google Gemma 4 31B (strong reasoning for nuanced classification).
+     * Fallback: Llama 3.3 70B.
      */
     attention: {
-        primary: 'mistralai/mistral-7b-instruct:free',
-        fallback: 'meta-llama/llama-3.1-8b-instruct:free',
+        primary: 'google/gemma-4-31b-it:free',
+        fallback: 'meta-llama/llama-3.3-70b-instruct:free',
         maxTokens: 500,
         temperature: 0.3,
-        description: 'Attention velocity scoring (social + volume + wallet growth)',
+        description: 'Attention velocity scoring (Gemma 4 31B)',
     },
 
     /**
      * Conviction score - smart money + retail conviction numeric scoring.
-     * Needs: numeric precision, scoring accuracy.
-     * Qwen 2.5 7B = strong at math/scoring, good numeric reasoning.
+     * Uses Google Gemma 4 31B (strong at math/reasoning for scoring tasks).
+     * Fallback: Llama 3.3 70B.
      */
     conviction: {
-        primary: 'qwen/qwen-2.5-7b-instruct:free',
-        fallback: 'meta-llama/llama-3.1-8b-instruct:free',
+        primary: 'google/gemma-4-31b-it:free',
+        fallback: 'meta-llama/llama-3.3-70b-instruct:free',
         maxTokens: 500,
         temperature: 0.2,
-        description: 'Conviction score analysis (smart money + retail scoring)',
+        description: 'Conviction score analysis (Gemma 4 31B)',
     },
 
     /**
      * General purpose - default fallback for any other AI task.
+     * Uses Google Gemma 4 31B as primary (most reliable free model).
+     * Fallback: Llama 3.3 70B.
      */
     general: {
-        primary: 'meta-llama/llama-3.3-70b-instruct:free',
-        fallback: 'mistralai/mistral-7b-instruct:free',
+        primary: 'google/gemma-4-31b-it:free',
+        fallback: 'meta-llama/llama-3.3-70b-instruct:free',
         maxTokens: 2000,
         temperature: 0.3,
-        description: 'General purpose AI task',
+        description: 'General purpose AI task (Gemma 4 31B)',
     },
 };
 
@@ -103,10 +110,10 @@ export const OPENROUTER_TASK_CONFIG: Record<
  */
 export const OPENROUTER_MODELS = [
     {
-        name: 'openrouter-deepseek-r1',
-        model: 'deepseek/deepseek-r1:free',
+        name: 'openrouter-gemma-4-31b',
+        model: 'google/gemma-4-31b-it:free',
         task: 'report' as OpenRouterTask,
-        priority: 4, // After 9Router (1-3), before other fallbacks
+        priority: 4, // After 9Router (1-3), before NVIDIA (8-9)
         enabled: true,
     },
     {
@@ -114,20 +121,6 @@ export const OPENROUTER_MODELS = [
         model: 'meta-llama/llama-3.3-70b-instruct:free',
         task: 'report' as OpenRouterTask,
         priority: 5,
-        enabled: true,
-    },
-    {
-        name: 'openrouter-mistral-7b',
-        model: 'mistralai/mistral-7b-instruct:free',
-        task: 'attention' as OpenRouterTask,
-        priority: 6,
-        enabled: true,
-    },
-    {
-        name: 'openrouter-qwen-2.5-7b',
-        model: 'qwen/qwen-2.5-7b-instruct:free',
-        task: 'conviction' as OpenRouterTask,
-        priority: 7,
         enabled: true,
     },
 ];
