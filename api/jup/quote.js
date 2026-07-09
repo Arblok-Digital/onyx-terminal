@@ -7,10 +7,33 @@ const MINTS = {
   USDC: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
 };
 
-export default async function handler(req, res) {
-  // CORS Headers
-  res.setHeader('Access-Control-Allow-Origin', '*');
+/**
+ * Allowed origins untuk CORS.
+ * Request dari origin lain akan ditolak.
+ */
+const ALLOWED_ORIGINS = [
+  'https://arblok-digital.vercel.app',
+  'http://localhost:5173',
+  'http://localhost:3001',
+  'http://127.0.0.1:5173',
+  'http://127.0.0.1:3001',
+];
+
+/** Set CORS headers based on request origin */
+function setCorsHeaders(req, res) {
+  const origin = req.headers.origin;
+  if (origin && ALLOWED_ORIGINS.includes(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+  }
+  // NOTE: origin tidak di whitelist → header CORS gak dikirim
+  // Browser akan nolak request secara otomatis
   res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, x-api-key, Accept');
+}
+
+export default async function handler(req, res) {
+  // CORS Headers — restricted, not wildcard
+  setCorsHeaders(req, res);
   if (req.method === 'OPTIONS') return res.status(200).end();
 
   try {

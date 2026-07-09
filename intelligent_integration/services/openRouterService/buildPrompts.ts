@@ -5,7 +5,7 @@
  * @exposes buildFlowPrompt, buildOnchainPrompt, buildMarketPrompt, etc.
  */
 
-import {
+import type {
     FlowAnalysis,
     OnchainAnalysis,
     MarketAnalysis,

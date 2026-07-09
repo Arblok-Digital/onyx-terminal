@@ -5,7 +5,6 @@
 
 import type {
     IntelligenceRanking,
-    IntelligenceReport,
     FlowAnalysis,
     OnchainAnalysis,
     MarketAnalysis,
@@ -16,32 +15,6 @@ import type {
 } from './types/analysisTypes';
 
 export class ReportParser {
-    /**
-     * Parse the raw intelligence response into a structured report
-     */
-    static parseIntelligenceResponse(rawResponse: string): IntelligenceReport {
-        const executiveSummary = this.extractSection(rawResponse, 'Executive Summary');
-        const keyInsights = this.extractKeyInsights(rawResponse);
-        const opportunityAssessment = this.extractAssessment(rawResponse, 'Opportunity Assessment');
-        const riskAssessment = this.extractAssessment(rawResponse, 'Risk Assessment');
-        const patternDetection = this.extractSection(rawResponse, 'Pattern Detection');
-        const recommendation = this.extractSection(rawResponse, 'Recommendation');
-        const intelligenceRanking = this.extractIntelligenceRanking(rawResponse);
-        const confidenceScore = this.calculateConfidenceScore(rawResponse);
-
-        return {
-            rawResponse,
-            executiveSummary,
-            keyInsights,
-            opportunityAssessment,
-            riskAssessment,
-            patternDetection,
-            recommendation,
-            confidenceScore,
-            intelligenceRanking
-        };
-    }
-
     /**
      * Extract a specific section from the response
      */
@@ -121,7 +94,6 @@ export class ReportParser {
                     const numericValue = parseInt(value.replace('%', '').trim(), 10);
                     const cleanKey = key.replace(/\s+/g, '');
 
-                    // Map the extracted key to the correct property
                     if (cleanKey === 'Opportunity' || cleanKey === 'opportunityScore') {
                         ranking.opportunityScore = numericValue;
                     } else if (cleanKey === 'Risk' || cleanKey === 'riskScore') {
@@ -165,20 +137,16 @@ export class ReportParser {
         survival?: SurvivalAnalysis,
         narrative?: NarrativeAnalysis
     ): IntelligenceRanking {
+        // Note: V3 types - all fields are optional, use ?? fallback
         const ranking: IntelligenceRanking = {
-            opportunityScore: earlyOpportunity ? earlyOpportunity.eoiScore : 0,
-            riskScore: onchain ? onchain.riskScore : 0,
-            smartMoneyScore: smartMoney ? smartMoney.smartMoneyScore : 0,
-            survivalScore: survival ? survival.survivalProbability : 0,
-            narrativeScore: narrative ? narrative.narrativeStrength * 10 : 0,
+            opportunityScore: (earlyOpportunity?.eoiScore ?? 0),
+            riskScore: (onchain?.riskScore != null ? 100 - onchain.riskScore : 50),
+            smartMoneyScore: (smartMoney?.smartMoneyScore ?? 0),
+            survivalScore: (survival?.survivalProbability ?? 0),
+            narrativeScore: (narrative?.narrativeStrength ? narrative.narrativeStrength * 10 : 0),
             overallScore: 0,
             rating: 'AVOID'
         };
-
-        // Adjust risk score to be 100 - riskScore (lower risk is better)
-        if (onchain) {
-            ranking.riskScore = 100 - onchain.riskScore;
-        }
 
         ranking.overallScore = this.calculateOverallScore(ranking);
         ranking.rating = this.calculateRating(ranking.overallScore);

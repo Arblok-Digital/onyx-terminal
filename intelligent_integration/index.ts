@@ -1,97 +1,48 @@
 /**
  * @file intelligent_integration/index.ts
- * @desc Barrel file for 9Router Intelligence module
- * @exposes research manager, analysis types, and main entry points
+ * @desc Main entry point for 9Router Intelligence module
+ *       Exports public API for token analysis
  */
+
+/**
+ * Types and analysis interfaces
+ */
+export * from './types/analysisTypes';
+export { AgentOrchestrator } from './agentOrchestrator';
 
 import { AgentOrchestrator } from './agentOrchestrator';
-import { AnalysisAggregator } from './core/analysisAggregator';
-import { Connection } from '@solana/web3.js';
-import type {
-    FlowAnalysis,
-    OnchainAnalysis,
-    MarketAnalysis,
-    EarlyOpportunityAnalysis,
-    NarrativeAnalysis,
-    SmartMoneyAnalysis,
-    SurvivalAnalysis,
-    IntelligenceRanking,
-    IntelligenceReport,
-    AttentionVelocityAnalysis,
-    ConvictionScoreAnalysis,
-    SignalConsensusResult
-} from './types/analysisTypes';
-import { AgentConfig } from './types/agentTypes';
-// Singleton orchestrator pattern
-let orchestrator: AgentOrchestrator | null = null;
 
-export function initializeOrchestrator(solanaConnection: Connection) {
-    orchestrator = new AgentOrchestrator(solanaConnection);
-    console.log('[IntelligentIntegration] Orchestrator initialized with on-chain connection');
+let orchestratorInstance: AgentOrchestrator | null = null;
+
+/**
+ * Initialize the orchestrator with a Solana connection.
+ * This should be called once at app startup with a valid connection.
+ * @param connection - Solana connection object
+ */
+export function initializeOrchestrator(connection: any): void {
+    // Create or reset the orchestrator instance with the given connection
+    orchestratorInstance = new AgentOrchestrator(connection);
 }
 
-function getOrchestrator(): AgentOrchestrator {
-    if (!orchestrator) {
-        orchestrator = new AgentOrchestrator();
+/**
+ * Get the orchestrator instance, initializing it if necessary.
+ * If initializeOrchestrator has not been called, this will create an orchestrator without a connection (which may\will \havediminished \functinality, but prevents null reference errors).
+ * @returns The orchestrator instance
+ */
+export function getOrchestrator(): AgentOrchestrator {
+    if (!orchestratorInstance) {
+        orchestratorInstance = new AgentOrchestrator();
     }
-    return orchestrator;
+    return orchestratorInstance;
 }
 
 /**
- * Check if real API keys are available
+ * Analyze a token using the AI agent orchestration system
+ * @param tokenAddress - The tokenAddress The token mint address
+ * @param tokenSymbol Optional token symbol for display
+ * @returns Promise resolving to intelligence report
  */
-export function hasRealApiKeys(): boolean {
-    const heliusKey = import.meta.env.VITE_HELIUS_API_KEY;
-    const openRouterKey = import.meta.env.VITE_OPENROUTER_API_KEY;
-    return !!(heliusKey || openRouterKey);
+export async function analyzeToken(tokenAddress: string, tokenSymbol: string = 'UNKNOWN'): Promise<any> {
+    const orchestrator = getOrchestrator();
+    return orchestrator.analyzeToken(tokenAddress, tokenSymbol);
 }
-
-/**
- * Main entry point for token analysis
- */
-export async function analyzeToken(
-    token: string,
-    tokenSymbol: string = 'UNKNOWN',
-    _flowData?: FlowAnalysis,
-    _onchainData?: OnchainAnalysis,
-    _marketData?: MarketAnalysis,
-    _opportunityData?: EarlyOpportunityAnalysis,
-    _narrativeData?: NarrativeAnalysis,
-    _smartMoneyData?: SmartMoneyAnalysis,
-    _survivalData?: SurvivalAnalysis
-): Promise<IntelligenceReport> {
-    const orch = getOrchestrator();
-    return orch.analyzeToken(token, tokenSymbol, 30);
-}
-
-// Re-export Arkham Intelligence Service
-export { ArkhamIntelligenceService, arkhamService } from './services/arkhamIntelligenceService';
-export type {
-    ArkhamAddressInfo,
-    ArkhamTokenBalance,
-    ArkhamAlert,
-    ArkhamEntity,
-    ArkhamWhaleAlert,
-} from './services/arkhamIntelligenceService';
-
-// Export core components
-export { generateIntelligenceReport } from './core/intelligenceReportGenerator';
-export { AnalysisAggregator } from './core/analysisAggregator';
-export { calculateDefaultRanking } from './core/rankingCalculator';
-
-// Re-export types for consumers
-export type {
-    FlowAnalysis,
-    OnchainAnalysis,
-    MarketAnalysis,
-    EarlyOpportunityAnalysis,
-    NarrativeAnalysis,
-    SmartMoneyAnalysis,
-    SurvivalAnalysis,
-    IntelligenceRanking,
-    IntelligenceReport,
-    AttentionVelocityAnalysis,
-    ConvictionScoreAnalysis,
-    SignalConsensusResult
-};
-export type { AgentConfig };

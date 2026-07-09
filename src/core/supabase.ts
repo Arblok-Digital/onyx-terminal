@@ -16,8 +16,19 @@ const rawKey = CONFIG.SUPABASE_ANON_KEY?.trim();
  * Flag: true only if real Supabase credentials are provided.
  * Components should check this before making Supabase calls
  * to avoid network errors from placeholder URLs.
+ * 
+ * Detects:
+ * - 'placeholder' keyword (old convention)
+ * - 'YOUR_' prefix (standard .env.example convention)
+ * - 'localhost' or '127.0.0.1' (local dev — skip unless intentional)
  */
-export const supabaseConfigured = !!(rawUrl && rawKey && !rawUrl.includes('placeholder'));
+export const supabaseConfigured = !!(rawUrl && rawKey 
+  && !rawUrl.includes('placeholder') 
+  && !rawKey.includes('placeholder')
+  && !rawUrl.includes('YOUR_') 
+  && !rawKey.includes('YOUR_')
+  && !rawUrl.includes('localhost')
+  && !rawUrl.includes('127.0.0.1'));
 
 // Bersihkan URL: hapus trailing slash atau path rest/v1 jika ada
 const cleanUrl = rawUrl

@@ -29,9 +29,8 @@ export function useTokenStats(address?: string) {
           const volume = pair.volume?.h24 || 0;
 
           // --- STEP 2: On-chain RPC (Distribution) ---
-          const rpcUrl = CONFIG.SOLANA_RPC;
-          const useHelius = CONFIG.HELIUS_API_KEY && rpcUrl.includes('helius');
-          const fullRpcUrl = useHelius ? `${rpcUrl}?api-key=${CONFIG.HELIUS_API_KEY}` : rpcUrl;
+          // CONFIG.SOLANA_RPC otomatis pake Helius kalo API key tersedia
+          const fullRpcUrl = CONFIG.SOLANA_RPC;
           
           const rpcFetch = (body: any) =>
             rpcRateLimiter.fetch(fullRpcUrl, {

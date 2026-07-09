@@ -1,118 +1,239 @@
 /**
- * Shared utilities for all agents
+ * @file agentUtils.ts
+ * @layer agents
+ * @desc Shared utilities for all agents.
+ *       Removed broken imports (config/rpcConfig, services/tokenCache, services/agentStats).
+ *       Now self-contained with safe number helpers and DexScreener data fetcher.
+ *
+ * @exposes safeNumber, safePercent, fetchDexScreenerData, DexScreenerData
  */
-import { Connection, PublicKey } from '@solana/web3.js';
-import { RPC_ENDPOINT } from '../config/rpcConfig';
-import { tokenCache } from '../services/tokenCache';
-import { stats } from '../services/agentStats';
-import Decimal from 'decimal.js';
-import type { OnchainData, SocialData } from './onchainAgent';
 
-// ──────────────────────────────────────
-// Decimal.js helpers (overflow-safe)
-// ──────────────────────────────────────
-
-/** Convert any value to Decimal safely */
-export function toDecimal(val: any): Decimal {
-    if (val === null || val === undefined || val === '' || (typeof val === 'number' && !isFinite(val))) {
-        return new Decimal(0);
-    }
-    try {
-        const n = typeof val === 'string' ? val.replace(/[^0-9.\-eE+]/g, '') : val;
-        const d = new Decimal(n);
-        return d.isFinite() ? d : new Decimal(0);
-    } catch {
-        return new Decimal(0);
-    }
-}
-
-/** Safe multiply */
-export function dMul(a: any, b: any): Decimal {
-    return toDecimal(a).mul(toDecimal(b));
-}
-
-/** Safe divide (returns fallback on /0) */
-export function dDiv(a: any, b: any, fallback: string | number = 0): Decimal {
-    const divisor = toDecimal(b);
-    if (divisor.isZero()) return toDecimal(fallback);
-    return toDecimal(a).div(divisor);
-}
-
-/** Safe add */
-export function dAdd(...vals: any[]): Decimal {
-    return vals.reduce<Decimal>((sum, v) => sum.add(toDecimal(v)), new Decimal(0));
-}
-
-/** Decimal → number */
-export function dNum(d: Decimal): number {
-    return d.toNumber();
-}
-
-// ──────────────────────────────────────
-// Number helpers
-// ──────────────────────────────────────
+// ── Number Helpers (overflow-safe) ──────────────────────────────
 
 /** Safe number conversion */
-export function safeNumber(val: any, fallback = 0): number {
-    if (val === null || val === undefined) return fallback;
-    const n = Number(val);
-    return Number.isFinite(n) ? n : fallback;
+export function safeNumber(val: unknown, fallback: number = 0): number {
+  if (val === null || val === undefined) return fallback;
+  const n = Number(val);
+  return Number.isFinite(n) ? n : fallback;
 }
 
-/** Safe percentage */
-export function safePercent(val: any, fallback = 0): number {
-    return Math.min(Math.max(safeNumber(val, fallback), -10000), 10000);
+/** Safe percentage (clamped -10000 to 10000) */
+export function safePercent(val: unknown, fallback: number = 0): number {
+  return Math.min(Math.max(safeNumber(val, fallback), -10000), 10000);
 }
 
-// ──────────────────────────────────────
-// Token Metadata (with cache)
-// ──────────────────────────────────────
+/** Safe divide with fallback */
+export function safeDivide(a: number, b: number, fallback: number = 0): number {
+  if (b === 0 || !Number.isFinite(b)) return fallback;
+  return a / b;
+}
 
-export async function fetchTokenMetadata(mint: string): Promise<OnchainData> {
-    const cached = tokenCache.get(mint);
-    if (cached) {
-        stats.cacheHits++;
-        return cached.onchain;
+/** Clamp value to range */
+export function clamp(val: number, min: number = 0, max: number = 1): number {
+  return Math.min(Math.max(val, min), max);
+}
+
+/** Round to N decimal places */
+export function round(val: number, decimals: number = 2): number {
+  const factor = 10 ** decimals;
+  return Math.round(val * factor) / factor;
+}
+
+// ── Cache Helper ────────────────────────────────────────────────
+
+export interface CacheEntry<T> {
+  data: T;
+  timestamp: number;
+}
+
+export class SimpleCache<T> {
+  private cache: Map<string, CacheEntry<T>>;
+  private ttl: number;
+
+  constructor(ttl: number = 60_000) {
+    this.cache = new Map();
+    this.ttl = ttl;
+  }
+
+  get(key: string): T | null {
+    const entry = this.cache.get(key);
+    if (entry && Date.now() - entry.timestamp < this.ttl) {
+      return entry.data;
+    }
+    this.cache.delete(key);
+    return null;
+  }
+
+  set(key: string, data: T): void {
+    if (this.cache.size > 200) {
+      const firstKey = this.cache.keys().next().value;
+      if (firstKey) this.cache.delete(firstKey);
+    }
+    this.cache.set(key, { data, timestamp: Date.now() });
+  }
+
+  clear(): void {
+    this.cache.clear();
+  }
+
+  delete(key: string): void {
+    this.cache.delete(key);
+  }
+}
+
+// ── DexScreener Data Fetcher ────────────────────────────────────
+// DexScreener is free, no API key needed, 300 req/min limit.
+// Used by MarketAgent and FlowIntelligenceAgent for real market data.
+
+export interface DexScreenerPair {
+  chainId: string;
+  dexId: string;
+  pairAddress: string;
+  baseToken: { address: string; name: string; symbol: string };
+  quoteToken: { address: string; name: string; symbol: string };
+  priceUsd: string;
+  priceChange?: {
+    m5?: number;
+    h1?: number;
+    h6?: number;
+    h24?: number;
+  };
+  volume?: {
+    m5?: number;
+    h1?: number;
+    h6?: number;
+    h24?: number;
+  };
+  txns?: {
+    m5?: { buys: number; sells: number };
+    h1?: { buys: number; sells: number };
+    h6?: { buys: number; sells: number };
+    h24?: { buys: number; sells: number };
+  };
+  liquidity?: { usd?: number };
+  fdv?: number;
+  marketCap?: number;
+  pairCreatedAt?: number;
+  info?: {
+    imageUrl?: string;
+    websites?: { label?: string; url?: string }[];
+    socials?: { type?: string; platform?: string; url?: string }[];
+  };
+}
+
+export interface DexScreenerData {
+  symbol: string;
+  name: string;
+  priceUsd: number;
+  priceChange5m: number;
+  priceChange1h: number;
+  priceChange6h: number;
+  priceChange24h: number;
+  volume5m: number;
+  volume1h: number;
+  volume6h: number;
+  volume24h: number;
+  buys5m: number;
+  sells5m: number;
+  buys1h: number;
+  sells1h: number;
+  buys6h: number;
+  sells6h: number;
+  buys24h: number;
+  sells24h: number;
+  liquidityUsd: number;
+  fdv: number;
+  marketCap: number;
+  pairCreatedAt: number | null;
+  socials: { type: string; url: string }[];
+  websites: { label: string; url: string }[];
+}
+
+/**
+ * Fetch token data from DexScreener API (no key needed).
+ * Picks the pair with highest liquidity.
+ */
+export async function fetchDexScreenerData(mint: string): Promise<DexScreenerData | null> {
+  try {
+    const url = `https://api.dexscreener.com/latest/dex/tokens/${mint}`;
+    const res = await fetch(url, {
+      headers: { accept: 'application/json' },
+      signal: AbortSignal.timeout(10_000),
+    });
+
+    if (!res.ok) {
+      console.warn(`[DexScreener] HTTP ${res.status} for ${mint}`);
+      return null;
     }
 
-    const connection = new Connection(RPC_ENDPOINT, 'confirmed');
-    const pubkey = new PublicKey(mint);
-    const start = Date.now();
+    const data = await res.json();
+    const pairs: DexScreenerPair[] = data.pairs ?? [];
 
-    const [supplyInfo, largestHolders, tokenLargestAccounts] = await Promise.all([
-        connection.getTokenSupply(pubkey).catch(() => null),
-        connection.getTokenLargestAccounts(pubkey).catch(() => ({ value: [] })),
-        connection.getParsedAccountInfo(pubkey).catch(() => null),
-    ]);
+    if (pairs.length === 0) return null;
 
-    stats.recordRpcCall(Date.now() - start);
+    // Pick pair with highest liquidity
+    const best = pairs.reduce((best, p) => {
+      const pL = p.liquidity?.usd ?? 0;
+      const bL = best.liquidity?.usd ?? 0;
+      return pL > bL ? p : best;
+    });
 
-    const totalSupply = supplyInfo?.value?.uiAmount ?? 0;
-    const holderCount = largestHolders?.value?.length ?? 0;
-    const decimals = supplyInfo?.value?.decimals ?? 9;
+    const socials = (best.info?.socials ?? []).map((s) => ({
+      type: s.type || s.platform || 'unknown',
+      url: s.url || '',
+    })).filter((s) => s.url);
 
-    // Whale concentration
-    const topHolderPct = largestHolders?.value?.slice(0, 5).reduce((acc, h) => {
-        const amount = safeNumber(h.uiAmount, 0);
-        return acc + (totalSupply > 0 ? (amount / totalSupply) * 100 : 0);
-    }, 0) ?? 0;
+    const websites = (best.info?.websites ?? []).map((w) => ({
+      label: w.label || 'website',
+      url: w.url || '',
+    })).filter((w) => w.url);
 
-    // LP info from token account
-    const accountData = tokenLargestAccounts?.value?.data?.parsed?.info;
-    const isLP = accountData?.owner === '675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8' ||
-        accountData?.owner === 'whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc';
-
-    const onchain: OnchainData = {
-        totalSupply,
-        holderCount,
-        topHolderPct,
-        decimals,
-        creator: accountData?.owner ?? '',
-        isLP,
-        lpLockedPct: 0,
-        tokenAge: 0,
+    return {
+      symbol: best.baseToken.symbol,
+      name: best.baseToken.name,
+      priceUsd: safeNumber(best.priceUsd, 0),
+      priceChange5m: safeNumber(best.priceChange?.m5, 0),
+      priceChange1h: safeNumber(best.priceChange?.h1, 0),
+      priceChange6h: safeNumber(best.priceChange?.h6, 0),
+      priceChange24h: safeNumber(best.priceChange?.h24, 0),
+      volume5m: safeNumber(best.volume?.m5, 0),
+      volume1h: safeNumber(best.volume?.h1, 0),
+      volume6h: safeNumber(best.volume?.h6, 0),
+      volume24h: safeNumber(best.volume?.h24, 0),
+      buys5m: safeNumber(best.txns?.m5?.buys, 0),
+      sells5m: safeNumber(best.txns?.m5?.sells, 0),
+      buys1h: safeNumber(best.txns?.h1?.buys, 0),
+      sells1h: safeNumber(best.txns?.h1?.sells, 0),
+      buys6h: safeNumber(best.txns?.h6?.buys, 0),
+      sells6h: safeNumber(best.txns?.h6?.sells, 0),
+      buys24h: safeNumber(best.txns?.h24?.buys, 0),
+      sells24h: safeNumber(best.txns?.h24?.sells, 0),
+      liquidityUsd: safeNumber(best.liquidity?.usd, 0),
+      fdv: safeNumber(best.fdv, 0),
+      marketCap: safeNumber(best.marketCap ?? best.fdv, 0),
+      pairCreatedAt: best.pairCreatedAt ?? null,
+      socials,
+      websites,
     };
-
-    tokenCache.set(mint, { onchain, social: {} as SocialData, cachedAt: Date.now() });
-    return onchain;
+  } catch (error) {
+    console.warn('[DexScreener] fetch failed for', mint, error);
+    return null;
+  }
 }
+
+// ── Logger Helper ───────────────────────────────────────────────
+// Minimal logger that agents can use without Inversify DI
+
+export interface AgentLogger {
+  info(msg: string, ctx?: Record<string, unknown>): void;
+  warn(msg: string, ctx?: Record<string, unknown>): void;
+  error(msg: string, err?: unknown, ctx?: Record<string, unknown>): void;
+  debug(msg: string, ctx?: Record<string, unknown>): void;
+}
+
+export const consoleLogger: AgentLogger = {
+  info: (msg, ctx) => console.info(`[INFO] ${msg}`, ctx ?? ''),
+  warn: (msg, ctx) => console.warn(`[WARN] ${msg}`, ctx ?? ''),
+  error: (msg, err, ctx) => console.error(`[ERROR] ${msg}`, err ?? '', ctx ?? ''),
+  debug: (msg, ctx) => console.debug(`[DEBUG] ${msg}`, ctx ?? ''),
+};

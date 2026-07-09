@@ -3,8 +3,8 @@
  * @desc Unit tests for prompt building functions
  */
 
-import { describe, it, expect } from 'vitest';
-import {
+import type { describe, it, expect } from 'vitest';
+import type {
     buildFlowPrompt,
     buildOnchainPrompt,
     buildMarketPrompt,
@@ -26,7 +26,7 @@ import type {
 
 const mockFlowData: FlowAnalysis = {
     token: 'TEST',
-    patterns: [{ type: 'accumulation', strength: 0.8, evidence: ['test'] }],
+    patterns: [{ type: 'accumulation', strength: 0.8 }],
     confidence: 0.85,
     evidence: ['buy pressure increasing'],
     realtimeData: { buyPressure: 0.7, sellPressure: 0.3, volumeGrowth: 0.5, whaleActivity: 0.6 }

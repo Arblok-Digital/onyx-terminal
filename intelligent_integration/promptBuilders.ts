@@ -1,6 +1,7 @@
 /**
  * @file intelligent_integration/promptBuilders.ts
- * @desc Prompt building methods for different analysis types
+ * @desc Prompt building methods for different analysis types.
+ *       All field access is null-safe for V3 optional types.
  */
 
 import type {
@@ -13,26 +14,37 @@ import type {
     SurvivalAnalysis
 } from './types/analysisTypes';
 
+/**
+ * Safe fallback for optional nested objects.
+ * When a V3 optional field is undefined, provides an empty object
+ * cast to the proper type so property access (with ?? chaining) compiles.
+ */
+function safeObj<T extends object>(val: T | undefined): T {
+    return val ?? ({} as T);
+}
+
 export class PromptBuilder {
-    /**
-     * Build prompt for flow analysis
-     */
+    /** Build prompt for flow analysis */
     static buildFlowPrompt(flowData: FlowAnalysis): string {
+        const patternsStr = (flowData.patterns ?? []).map(p =>
+            `- ${p.type}: ${p.strength ?? 'N/A'}/100`
+        ).join('\n') || 'No patterns detected';
+
+        const rt = flowData.realtimeData;
+        const realtimeStr = rt
+            ? `\n- Buy Pressure: ${rt.buyPressure ?? 'N/A'}\n- Sell Pressure: ${rt.sellPressure ?? 'N/A'}\n- Volume Growth: ${rt.volumeGrowth ?? 'N/A'}\n- Whale Activity: ${rt.whaleActivity ?? 'N/A'}`
+            : 'Not available';
+
         return `
 ## Flow Analysis Prompt
 
 Analyze the token flow patterns for ${flowData.token} based on the following data:
 
 ### Flow Patterns Detected:
-${flowData.patterns.map(pattern => `- ${pattern.type}: ${pattern.strength}/100 (${pattern.evidence.join(', ')})`).join('\n')}
+${patternsStr}
 
 ### Realtime Data (if available):
-${flowData.realtimeData ? `
-- Buy Pressure: ${flowData.realtimeData.buyPressure}
-- Sell Pressure: ${flowData.realtimeData.sellPressure}
-- Volume Growth: ${flowData.realtimeData.volumeGrowth}
-- Whale Activity: ${flowData.realtimeData.whaleActivity}
-` : 'Not available'}
+${realtimeStr}
 
 ### Analysis Instructions:
 1. Identify the dominant flow patterns and their significance
@@ -54,51 +66,57 @@ Confidence Score: [X]%
 `;
     }
 
-    /**
-     * Build prompt for onchain analysis
-     */
+    /** Build prompt for onchain analysis */
     static buildOnchainPrompt(onchainData: OnchainAnalysis): string {
+        const wa = safeObj(onchainData.whaleActivity);
+        const hg = safeObj(onchainData.holderGrowth);
+        const da = safeObj(onchainData.developerActivity);
+        const la = safeObj(onchainData.liquidityAnalysis);
+        const ri = safeObj(onchainData.rugPullIndicators);
+        const ca = onchainData.contractAnalysis;
+
+        const devWallets = (da.devWallets ?? []).length > 0
+            ? `- Dev Wallets: ${(da.devWallets ?? []).join(', ')}`
+            : '';
+
+        const contractStr = ca
+            ? `\n- Age: ${ca.age} days\n- Creator: ${ca.creator}\n- Mint Authority: ${ca.mintAuthority}\n- Freeze Authority: ${ca.freezeAuthority}\n- Verified: ${ca.isVerified}\n- Renounced: ${ca.renounced}`
+            : 'Not available';
+
         return `
 ## Onchain Analysis Prompt
 
 Analyze the onchain metrics for ${onchainData.token} based on the following data:
 
 ### Whale Activity:
-- Large Transfers: ${onchainData.whaleActivity.largeTransfers}
-- Whale Wallets: ${onchainData.whaleActivity.whaleWallets}
-- Concentration: ${onchainData.whaleActivity.concentration}%
+- Large Transfers: ${wa.largeTransfers ?? 'N/A'}
+- Whale Wallets: ${wa.whaleWallets ?? 'N/A'}
+- Concentration: ${wa.concentration ?? 'N/A'}%
 
 ### Holder Growth:
-- New Holders: ${onchainData.holderGrowth.newHolders}
-- Growth Rate: ${onchainData.holderGrowth.growthRate}%
+- New Holders: ${hg.newHolders ?? 'N/A'}
+- Growth Rate: ${hg.growthRate ?? 'N/A'}%
 
 ### Developer Activity:
-- Dev Wallet Transactions: ${onchainData.developerActivity.devWalletTransactions}
-- Suspicious Transfers: ${onchainData.developerActivity.suspiciousTransfers}
-- Dev Wallet Balance: ${onchainData.developerActivity.devWalletBalance}
-${onchainData.developerActivity.devWallets.length > 0 ? `- Dev Wallets: ${onchainData.developerActivity.devWallets.join(', ')}` : ''}
+- Dev Wallet Transactions: ${da.devWalletTransactions ?? 'N/A'}
+- Suspicious Transfers: ${da.suspiciousTransfers ?? 'N/A'}
+- Dev Wallet Balance: ${da.devWalletBalance ?? 'N/A'}
+${devWallets}
 
 ### Liquidity Analysis:
-- Liquidity Depth: ${onchainData.liquidityAnalysis.liquidityDepth}
-- Liquidity Change (24h): ${onchainData.liquidityAnalysis.liquidityChange24h}%
-- Locked Liquidity: ${onchainData.liquidityAnalysis.lockedLiquidity}%
-- Liquidity Concentration: ${onchainData.liquidityAnalysis.liquidityConcentration}%
+- Liquidity Depth: ${la.liquidityDepth ?? 'N/A'}
+- Liquidity Change (24h): ${la.liquidityChange24h ?? 'N/A'}%
+- Locked Liquidity: ${la.lockedLiquidity ?? 'N/A'}%
+- Liquidity Concentration: ${la.liquidityConcentration ?? 'N/A'}%
 
 ### Rug Pull Indicators:
-- Dump Score: ${onchainData.rugPullIndicators.dumpScore}/100
-- Liquidity Removal Score: ${onchainData.rugPullIndicators.liquidityRemovalScore}/100
-- Dev Wallet Activity Score: ${onchainData.rugPullIndicators.devWalletActivityScore}/100
-- Overall Rug Score: ${onchainData.rugPullIndicators.overallRugScore}/100
+- Dump Score: ${ri.dumpScore ?? 'N/A'}/100
+- Liquidity Removal Score: ${ri.liquidityRemovalScore ?? 'N/A'}/100
+- Dev Wallet Activity Score: ${ri.devWalletActivityScore ?? 'N/A'}/100
+- Overall Rug Score: ${ri.overallRugScore ?? 'N/A'}/100
 
 ### Contract Analysis (if available):
-${onchainData.contractAnalysis ? `
-- Age: ${onchainData.contractAnalysis.age} days
-- Creator: ${onchainData.contractAnalysis.creator}
-- Mint Authority: ${onchainData.contractAnalysis.mintAuthority}
-- Freeze Authority: ${onchainData.contractAnalysis.freezeAuthority}
-- Verified: ${onchainData.contractAnalysis.isVerified}
-- Renounced: ${onchainData.contractAnalysis.renounced}
-` : 'Not available'}
+${contractStr}
 
 ### Analysis Instructions:
 1. Assess the risk level based on rug pull indicators
@@ -134,44 +152,56 @@ Risk Score: [X]/100
 `;
     }
 
-    /**
-     * Build prompt for market analysis
-     */
+    /** Build prompt for market analysis */
     static buildMarketPrompt(marketData: MarketAnalysis): string {
+        const pt = safeObj(marketData.priceTrend);
+        const va = safeObj(marketData.volumeAnalysis);
+        const la = safeObj(marketData.liquidityAnalysis);
+
+        const suspiciousVolStr = va.suspiciousVolume
+            ? `- Suspicious Volume: $${va.suspiciousVolume}`
+            : '';
+
+        const liqChangeStr = la.change24h !== undefined
+            ? `- 24h Change: ${la.change24h}%`
+            : '';
+
+        const mcapStr = marketData.marketCap
+            ? `- Market Cap: $${marketData.marketCap}`
+            : 'Not available';
+
+        const sa = marketData.sentimentAnalysis;
+        const sentimentStr = sa
+            ? `\n- Sentiment Score: ${sa.sentimentScore}/100\n- Positive Mentions: ${sa.positiveMentions}\n- Negative Mentions: ${sa.negativeMentions}\n- Neutral Mentions: ${sa.neutralMentions}\n- Sentiment Trend: ${sa.sentimentTrend}\n- Source: ${sa.source}`
+            : 'Not available';
+
         return `
 ## Market Analysis Prompt
 
 Analyze the market dynamics for ${marketData.token} based on the following data:
 
 ### Price Trend:
-- Current Price: $${marketData.priceTrend.current}
-- 24h Change: ${marketData.priceTrend.change24h}%
-- 7d Change: ${marketData.priceTrend.change7d}%
+- Current Price: $${pt.current ?? 'N/A'}
+- 24h Change: ${pt.change24h ?? 'N/A'}%
+- 7d Change: ${pt.change7d ?? 'N/A'}%
 
 ### Volume Analysis:
-- 24h Volume: $${marketData.volumeAnalysis.volume24h}
-- Volume Change: ${marketData.volumeAnalysis.volumeChange}%
-${marketData.volumeAnalysis.suspiciousVolume ? `- Suspicious Volume: $${marketData.volumeAnalysis.suspiciousVolume}` : ''}
+- 24h Volume: $${va.volume24h ?? 'N/A'}
+- Volume Change: ${va.volumeChange ?? 'N/A'}%
+${suspiciousVolStr}
 
 ### Liquidity Analysis:
-- Depth: $${marketData.liquidityAnalysis.depth}
-- Slippage: ${marketData.liquidityAnalysis.slippage}%
-${marketData.liquidityAnalysis.change24h ? `- 24h Change: ${marketData.liquidityAnalysis.change24h}%` : ''}
+- Depth: $${la.depth ?? 'N/A'}
+- Slippage: ${la.slippage ?? 'N/A'}%
+${liqChangeStr}
 
 ### Market Cap:
-${marketData.marketCap ? `- Market Cap: $${marketData.marketCap}` : 'Not available'}
+${mcapStr}
 
 ### Sentiment Analysis:
-${marketData.sentimentAnalysis ? `
-- Sentiment Score: ${marketData.sentimentAnalysis.sentimentScore}/100
-- Positive Mentions: ${marketData.sentimentAnalysis.positiveMentions}
-- Negative Mentions: ${marketData.sentimentAnalysis.negativeMentions}
-- Neutral Mentions: ${marketData.sentimentAnalysis.neutralMentions}
-- Sentiment Trend: ${marketData.sentimentAnalysis.sentimentTrend}
-- Source: ${marketData.sentimentAnalysis.source}
-` : 'Not available'}
+${sentimentStr}
 
-### Volatility Score: ${marketData.volatilityScore}/100
+### Volatility Score: ${marketData.volatilityScore ?? 'N/A'}/100
 
 ### Analysis Instructions:
 1. Analyze price trends and identify key support/resistance levels
@@ -212,28 +242,29 @@ Volatility Score: [X]/100
 `;
     }
 
-    /**
-     * Build prompt for early opportunity analysis
-     */
+    /** Build prompt for early opportunity analysis */
     static buildOpportunityPrompt(opportunityData: EarlyOpportunityAnalysis): string {
+        const f = safeObj(opportunityData.factors);
+        const evidenceStr = (opportunityData.evidence ?? []).map(e => `- ${e}`).join('\n') || 'No evidence available';
+
         return `
 ## Early Opportunity Analysis Prompt
 
 Analyze the early opportunity signals for ${opportunityData.token} based on the following data:
 
 ### Opportunity Factors:
-- Volume Velocity: ${opportunityData.factors.volumeVelocity}/100
-- Fresh Wallet Growth: ${opportunityData.factors.freshWalletGrowth}/100
-- Whale Entry: ${opportunityData.factors.whaleEntry}/100
-- Liquidity Growth: ${opportunityData.factors.liquidityGrowth}/100
-- Buy Pressure: ${opportunityData.factors.buyPressure}/100
-- Market Momentum: ${opportunityData.factors.marketMomentum}/100
+- Volume Velocity: ${f.volumeVelocity ?? 'N/A'}/100
+- Fresh Wallet Growth: ${f.freshWalletGrowth ?? 'N/A'}/100
+- Whale Entry: ${f.whaleEntry ?? 'N/A'}/100
+- Liquidity Growth: ${f.liquidityGrowth ?? 'N/A'}/100
+- Buy Pressure: ${f.buyPressure ?? 'N/A'}/100
+- Market Momentum: ${f.marketMomentum ?? 'N/A'}/100
 
-### Current Rating: ${opportunityData.rating}
-### Current EOI Score: ${opportunityData.eoiScore}/100
+### Current Rating: ${opportunityData.rating ?? 'N/A'}
+### Current EOI Score: ${opportunityData.eoiScore ?? 'N/A'}/100
 
 ### Evidence:
-${opportunityData.evidence.map(e => `- ${e}`).join('\n')}
+${evidenceStr}
 
 ### Analysis Instructions:
 1. Assess the strength of early opportunity signals
@@ -266,24 +297,27 @@ Updated Rating: [LOW/MODERATE/HIGH/EXTREME OPPORTUNITY]
 `;
     }
 
-    /**
-     * Build prompt for narrative analysis
-     */
+    /** Build prompt for narrative analysis */
     static buildNarrativePrompt(narrativeData: NarrativeAnalysis): string {
+        const evidenceStr = (narrativeData.evidence ?? []).map(e => `- ${e}`).join('\n') || 'No evidence available';
+        const relatedStr = (narrativeData.relatedTokens ?? []).length > 0
+            ? (narrativeData.relatedTokens ?? []).map(t => `- ${t}`).join('\n')
+            : 'None';
+
         return `
 ## Narrative Analysis Prompt
 
 Analyze the narrative and market story for ${narrativeData.token} based on the following data:
 
-### Current Narrative: "${narrativeData.narrative}"
-### Narrative Strength: ${narrativeData.narrativeStrength}/100
-### Confidence: ${narrativeData.confidence}/100
+### Current Narrative: "${narrativeData.narrative ?? 'Unknown'}"
+### Narrative Strength: ${narrativeData.narrativeStrength ?? 'N/A'}/100
+### Confidence: ${narrativeData.confidence ?? 'N/A'}/100
 
 ### Evidence:
-${narrativeData.evidence.map(e => `- ${e}`).join('\n')}
+${evidenceStr}
 
 ### Related Tokens:
-${narrativeData.relatedTokens && narrativeData.relatedTokens.length > 0 ? narrativeData.relatedTokens.map(t => `- ${t}`).join('\n') : 'None'}
+${relatedStr}
 
 ### Analysis Instructions:
 1. Assess the strength and coherence of the current narrative
@@ -310,35 +344,36 @@ Key Insights:
 - Insight 2: [description] (Confidence: [X]%)
 
 Related Tokens Analysis:
-${narrativeData.relatedTokens && narrativeData.relatedTokens.length > 0 ? `
-- ${narrativeData.relatedTokens.map(t => `${t}: [analysis]`).join('\n- ')}
-` : 'None'}
+${relatedStr === 'None' ? 'None' : (narrativeData.relatedTokens ?? []).map(t => `- ${t}: [analysis]`).join('\n')}
 
 Updated Narrative Strength: [X]/100
 `;
     }
 
-    /**
-     * Build prompt for smart money analysis
-     */
+    /** Build prompt for smart money analysis */
     static buildSmartMoneyPrompt(smartMoneyData: SmartMoneyAnalysis): string {
+        const whales = smartMoneyData.smartWhales ?? [];
+
+        const whalesDetail = whales.map(w =>
+            `\n- Address: ${w.address}\n  - Win Rate: ${w.winRate ?? 'N/A'}%\n  - ROI History: ${w.roiHistory ?? 'N/A'}%\n  - Entry Quality: ${w.entryQuality ?? 'N/A'}/100`
+        ).join('\n');
+
+        const whalesAssessment = whales.map(w =>
+            `\n- ${w.address}:\n  - Win Rate: [X]% (Impact: [high/medium/low])\n  - ROI History: [X]% (Impact: [high/medium/low])\n  - Entry Quality: [X]/100 (Impact: [high/medium/low])`
+        ).join('\n');
+
         return `
 ## Smart Money Analysis Prompt
 
 Analyze smart money activity for ${smartMoneyData.token} based on the following data:
 
-### Smart Money Score: ${smartMoneyData.smartMoneyScore}/100
-### Total Smart Money Volume: $${smartMoneyData.totalSmartMoneyVolume}
-### Smart Money Percentage: ${smartMoneyData.smartMoneyPercentage}%
-### Confidence: ${smartMoneyData.confidence}/100
+### Smart Money Score: ${smartMoneyData.smartMoneyScore ?? 'N/A'}/100
+### Total Smart Money Volume: $${smartMoneyData.totalSmartMoneyVolume ?? 'N/A'}
+### Smart Money Percentage: ${smartMoneyData.smartMoneyPercentage ?? 'N/A'}%
+### Confidence: ${smartMoneyData.confidence ?? 'N/A'}/100
 
 ### Smart Whales:
-${smartMoneyData.smartWhales.map(whale => `
-- Address: ${whale.address}
-  - Win Rate: ${whale.winRate}%
-  - ROI History: ${whale.roiHistory}%
-  - Entry Quality: ${whale.entryQuality}/100
-`).join('\n')}
+${whalesDetail || 'No smart whales detected'}
 
 ### Analysis Instructions:
 1. Assess the quality of smart money participation
@@ -355,12 +390,7 @@ Smart Money Analysis:
 [Your analysis here]
 
 Smart Whales Assessment:
-${smartMoneyData.smartWhales.map(whale => `
-- ${whale.address}:
-  - Win Rate: [X]% (Impact: [high/medium/low])
-  - ROI History: [X]% (Impact: [high/medium/low])
-  - Entry Quality: [X]/100 (Impact: [high/medium/low])
-`).join('\n')}
+${whalesAssessment || 'No smart whales to assess'}
 
 Key Insights:
 - Insight 1: [description] (Confidence: [X]%)
@@ -370,25 +400,25 @@ Updated Smart Money Score: [X]/100
 `;
     }
 
-    /**
-     * Build prompt for survival analysis
-     */
+    /** Build prompt for survival analysis */
     static buildSurvivalPrompt(survivalData: SurvivalAnalysis): string {
+        const f = safeObj(survivalData.factors);
+
         return `
 ## Survival Analysis Prompt
 
 Analyze the survival probability for ${survivalData.token} based on the following data:
 
-### Current Survival Probability: ${survivalData.survivalProbability}%
-### Estimated Lifespan: ${survivalData.estimatedLifespan}
-### Confidence: ${survivalData.confidence}/100
+### Current Survival Probability: ${survivalData.survivalProbability ?? 'N/A'}%
+### Estimated Lifespan: ${survivalData.estimatedLifespan ?? 'unknown'}
+### Confidence: ${survivalData.confidence ?? 'N/A'}/100
 
 ### Survival Factors:
-- Liquidity Retention: ${survivalData.factors.liquidityRetention}/100
-- Holder Growth: ${survivalData.factors.holderGrowth}/100
-- Buy/Sell Ratio: ${survivalData.factors.buySellRatio}/100
-- Whale Behavior: ${survivalData.factors.whaleBehavior}/100
-- Developer Activity: ${survivalData.factors.developerActivity}/100
+- Liquidity Retention: ${f.liquidityRetention ?? 'N/A'}/100
+- Holder Growth: ${f.holderGrowth ?? 'N/A'}/100
+- Buy/Sell Ratio: ${f.buySellRatio ?? 'N/A'}/100
+- Whale Behavior: ${f.whaleBehavior ?? 'N/A'}/100
+- Developer Activity: ${f.developerActivity ?? 'N/A'}/100
 
 ### Analysis Instructions:
 1. Assess each survival factor and its impact on longevity

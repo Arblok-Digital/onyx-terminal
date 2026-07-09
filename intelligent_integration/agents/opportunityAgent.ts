@@ -1,403 +1,371 @@
 /**
- * Opportunity Agent for Onyx Terminal
- * Analyzes early opportunity potential in newborn tokens
+ * @file opportunityAgent.ts
+ * @layer agent
+ * @desc Opportunity Agent (Phase 2) - Early Opportunity Index using flow/onchain/market signals.
+ *       Calculates EOI score (0-100) with entry/exit strategy recommendations.
+ *       No Inversify DI - plain class accepting AgentLogger.
+ *       Depends on Phase 1 outputs: FlowAnalysis, OnchainAnalysis, MarketAnalysis.
+ *
+ * @exposes OpportunityAgent
  */
-import { injectable, inject } from 'inversify';
-import type { EarlyOpportunityAnalysis, FlowAnalysis, OnchainAnalysis, MarketAnalysis } from '../types/analysisTypes';
-import type { Logger } from '../core/logger';
-import { TOKENS } from '../core/diTokens';
 
-@injectable()
+import type { EarlyOpportunityAnalysis, OpportunityFactors, FlowAnalysis, OnchainAnalysis, MarketAnalysis } from '../types/analysisTypes';
+import { safeNumber, safeDivide, clamp, round, SimpleCache, type AgentLogger, consoleLogger } from './agentUtils';
+
 export class OpportunityAgent {
-    private cache: Map<string, { data: EarlyOpportunityAnalysis, timestamp: number }>;
-    private cacheTTL: number = 300000; // 5 minutes
-    private logger: Logger;
+  private logger: AgentLogger;
+  private cache: SimpleCache<EarlyOpportunityAnalysis>;
 
-    constructor(@inject(TOKENS.Logger) logger: Logger) {
-        this.cache = new Map();
-        this.logger = logger;
+  constructor(logger?: AgentLogger) {
+    this.logger = logger ?? consoleLogger;
+    this.cache = new SimpleCache(300_000); // 5 min cache
+  }
+
+  /**
+   * Analyze early opportunity potential.
+   * Requires Phase 1: flowAnalysis, onchainAnalysis, marketAnalysis.
+   */
+  async analyzeToken(
+    tokenAddress: string,
+    flowAnalysis: FlowAnalysis,
+    onchainAnalysis: OnchainAnalysis,
+    marketAnalysis: MarketAnalysis,
+  ): Promise<EarlyOpportunityAnalysis> {
+    const cached = this.cache.get(tokenAddress);
+    if (cached) return cached;
+
+    const t0 = Date.now();
+    this.logger.info(`[OpportunityAgent] Analyzing ${tokenAddress.slice(0, 8)}...`);
+
+    try {
+      // Calculate EOI score (0-100)
+      const factors = this.calculateFactors(flowAnalysis, onchainAnalysis, marketAnalysis);
+      const riskAdjustment = this.calculateRiskAdjustment(onchainAnalysis, marketAnalysis);
+      const rawScore = (
+        (factors.volumeVelocity ?? 0) * 0.25 +
+        (factors.freshWalletGrowth ?? 0) * 0.20 +
+        (factors.whaleEntry ?? 0) * 0.20 +
+        (factors.liquidityGrowth ?? 0) * 0.15 +
+        (factors.buyPressure ?? 0) * 0.10 +
+        (factors.marketMomentum ?? 0) * 0.10
+      );
+      const eoiScore = Math.round(clamp(rawScore * (1 - riskAdjustment) * 100, 0, 100));
+
+      // Rating
+      const rating = this.getRating(eoiScore);
+
+      // Entry/Exit strategy
+      const entryStrategy = this.buildEntryStrategy(eoiScore, marketAnalysis);
+      const exitStrategy = this.buildExitStrategy(eoiScore, marketAnalysis);
+      const riskRewardRatio = this.calcRiskReward(marketAnalysis, onchainAnalysis);
+
+      // Predicted potential
+      const predictedPotential = {
+        shortTerm: round(clamp(eoiScore * 0.004 + (marketAnalysis.priceTrend?.change24h ?? 0) * 2, 0, 100), 1),
+        midTerm: round(clamp(eoiScore * 0.006 + (onchainAnalysis.holderGrowth?.growthRate ?? 0) * 50, 0, 100), 1),
+        longTerm: round(clamp(eoiScore * 0.003 + (1 - (onchainAnalysis.rugPullIndicators?.overallRugScore ?? 0.5)) * 30, 0, 100), 1),
+      };
+
+      // Validation metrics
+      const liquidityDepth = onchainAnalysis.liquidityAnalysis?.liquidityDepth ?? 0;
+      const concentration = onchainAnalysis.whaleActivity?.concentration ?? 0;
+      const rugScore = onchainAnalysis.rugPullIndicators?.overallRugScore ?? 0.5;
+      const isVerified = onchainAnalysis.contractAnalysis?.isVerified ?? false;
+
+      const validationMetrics = {
+        liquidityCheck: liquidityDepth > 10_000,
+        holderDistribution: concentration > 0.5 ? 'risky' as const : concentration > 0.3 ? 'concentrated' as const : 'healthy' as const,
+        contractSafety: rugScore < 0.3 ? 'safe' as const : isVerified ? 'verified' as const : 'unknown' as const,
+        socialVolume: marketAnalysis.volumeAnalysis?.volume24h ?? 0,
+      };
+
+      // Evidence
+      const evidence = this.generateEvidence(factors, flowAnalysis, onchainAnalysis, marketAnalysis);
+
+      // Confidence
+      const confidence = this.calculateConfidence(flowAnalysis, onchainAnalysis, marketAnalysis);
+
+      const analysis: EarlyOpportunityAnalysis = {
+        token: tokenAddress,
+        eoiScore,
+        rating,
+        factors,
+        entryStrategy,
+        exitStrategy,
+        riskRewardRatio,
+        predictedPotential,
+        validationMetrics,
+        evidence,
+        confidence,
+        opportunityScore: eoiScore,
+      };
+
+      this.cache.set(tokenAddress, analysis);
+
+      const dt = Date.now() - t0;
+      this.logger.info(`[OpportunityAgent] Complete in ${dt}ms`, { eoiScore, rating, confidence });
+
+      return analysis;
+    } catch (error) {
+      this.logger.error(`[OpportunityAgent] Failed for ${tokenAddress}`, error);
+      return this.buildEmptyAnalysis(tokenAddress);
+    }
+  }
+
+  private calculateFactors(
+    flow: FlowAnalysis,
+    onchain: OnchainAnalysis,
+    market: MarketAnalysis,
+  ): OpportunityFactors {
+    // Volume velocity
+    const volGrowth = flow.realtimeData?.volumeGrowth ?? 0;
+    const volChange = market.volumeAnalysis?.volumeChange ?? 0;
+    const suspiciousVol = market.volumeAnalysis?.suspiciousVolume ?? 0;
+    let volumeVelocity = 0;
+    if (volGrowth > 5) volumeVelocity += 0.4;
+    else if (volGrowth > 3) volumeVelocity += 0.3;
+    else if (volGrowth > 2) volumeVelocity += 0.2;
+    else if (volGrowth > 1) volumeVelocity += 0.1;
+    if (volChange > 3) volumeVelocity += 0.3;
+    else if (volChange > 2) volumeVelocity += 0.2;
+    else if (volChange > 1) volumeVelocity += 0.1;
+    if (suspiciousVol > 0.7) volumeVelocity *= 0.5;
+    volumeVelocity = clamp(volumeVelocity, 0, 1);
+
+    // Fresh wallet growth
+    const newHolders = onchain.holderGrowth?.newHolders ?? 0;
+    const growthRate = onchain.holderGrowth?.growthRate ?? 0;
+    let freshWalletGrowth = 0;
+    if (newHolders > 500) freshWalletGrowth += 0.4;
+    else if (newHolders > 200) freshWalletGrowth += 0.3;
+    else if (newHolders > 100) freshWalletGrowth += 0.2;
+    else if (newHolders > 50) freshWalletGrowth += 0.1;
+    if (growthRate > 0.5) freshWalletGrowth += 0.3;
+    else if (growthRate > 0.3) freshWalletGrowth += 0.2;
+    else if (growthRate > 0.1) freshWalletGrowth += 0.1;
+    freshWalletGrowth = clamp(freshWalletGrowth, 0, 1);
+
+    // Whale entry
+    const whaleActivity = flow.realtimeData?.whaleActivity ?? 0;
+    const whaleWallets = onchain.whaleActivity?.whaleWallets ?? 0;
+    const concentration = onchain.whaleActivity?.concentration ?? 0;
+    let whaleEntry = 0;
+    if (whaleActivity > 0.9) whaleEntry += 0.3;
+    else if (whaleActivity > 0.7) whaleEntry += 0.2;
+    else if (whaleActivity > 0.5) whaleEntry += 0.1;
+    if (whaleWallets > 5) whaleEntry += 0.3;
+    else if (whaleWallets > 3) whaleEntry += 0.2;
+    else if (whaleWallets > 1) whaleEntry += 0.1;
+    if (concentration > 0.3 && concentration < 0.7) whaleEntry += 0.2;
+    else if (concentration >= 0.7) whaleEntry *= 0.5;
+    whaleEntry = clamp(whaleEntry, 0, 1);
+
+    // Liquidity growth
+    const liqDepth = onchain.liquidityAnalysis?.liquidityDepth ?? 0;
+    const liqChange = onchain.liquidityAnalysis?.liquidityChange24h ?? 0;
+    const marketLiq = market.liquidityAnalysis?.depth ?? 0;
+    let liquidityGrowth = 0;
+    if (liqDepth > 5_000_000) liquidityGrowth += 0.3;
+    else if (liqDepth > 2_000_000) liquidityGrowth += 0.2;
+    else if (liqDepth > 1_000_000) liquidityGrowth += 0.1;
+    if (liqChange > 0.1) liquidityGrowth += 0.3;
+    else if (liqChange > 0.05) liquidityGrowth += 0.2;
+    else if (liqChange > 0) liquidityGrowth += 0.1;
+    if (marketLiq > 5_000_000) liquidityGrowth += 0.2;
+    else if (marketLiq > 2_000_000) liquidityGrowth += 0.1;
+    liquidityGrowth = clamp(liquidityGrowth, 0, 1);
+
+    // Buy pressure
+    const buyP = flow.realtimeData?.buyPressure ?? 1;
+    const sellP = flow.realtimeData?.sellPressure ?? 1;
+    const ratio = safeDivide(buyP, sellP, 1);
+    const buyPressure = ratio > 5 ? 1.0 : ratio > 3 ? 0.8 : ratio > 2 ? 0.6 : ratio > 1.5 ? 0.4 : ratio > 1 ? 0.2 : 0.1;
+
+    // Market momentum
+    const change24h = market.priceTrend?.change24h ?? 0;
+    const change7d = market.priceTrend?.change7d ?? 0;
+    const volatility = market.volatilityScore ?? 0;
+    let marketMomentum = 0;
+    if (change24h > 0.3) marketMomentum += 0.3;
+    else if (change24h > 0.2) marketMomentum += 0.2;
+    else if (change24h > 0.1) marketMomentum += 0.1;
+    if (change7d > 0.5) marketMomentum += 0.3;
+    else if (change7d > 0.3) marketMomentum += 0.2;
+    else if (change7d > 0.1) marketMomentum += 0.1;
+    if (volatility > 0.5 && volatility < 0.8) marketMomentum += 0.2;
+    else if (volatility >= 0.8) marketMomentum *= 0.7;
+    marketMomentum = clamp(marketMomentum, 0, 1);
+
+    // Technical score (avg of on-chain metrics)
+    const technicalScore = round((freshWalletGrowth + whaleEntry) / 2, 2);
+    // Market score (avg of market metrics)
+    const marketScore = round((volumeVelocity + liquidityGrowth + marketMomentum) / 3, 2);
+    // Community score (buy pressure + holder growth)
+    const communityScore = round((buyPressure + freshWalletGrowth) / 2, 2);
+    // Risk score (inverted rug score)
+    const riskScore = round(1 - (onchain.rugPullIndicators?.overallRugScore ?? 0.5), 2);
+    // Momentum score
+    const momentumScore = round((marketMomentum + buyPressure) / 2, 2);
+    // Overall
+    const overallScore = round((technicalScore * 0.25 + marketScore * 0.25 + communityScore * 0.2 + riskScore * 0.15 + momentumScore * 0.15), 2);
+
+    return {
+      volumeVelocity: round(volumeVelocity, 2),
+      freshWalletGrowth: round(freshWalletGrowth, 2),
+      whaleEntry: round(whaleEntry, 2),
+      liquidityGrowth: round(liquidityGrowth, 2),
+      buyPressure: round(buyPressure, 2),
+      marketMomentum: round(marketMomentum, 2),
+      technicalScore,
+      marketScore,
+      communityScore,
+      riskScore,
+      momentumScore,
+      overallScore,
+    };
+  }
+
+  private calculateRiskAdjustment(onchain: OnchainAnalysis, market: MarketAnalysis): number {
+    const rugScore = onchain.rugPullIndicators?.overallRugScore ?? 0.5;
+    const riskScore = onchain.riskScore ?? 0.5;
+    const suspiciousVol = market.volumeAnalysis?.suspiciousVolume ?? 0;
+    let adjustment = rugScore * 0.4 + riskScore * 0.3;
+    if (suspiciousVol > 0.7) adjustment += 0.2;
+    else if (suspiciousVol > 0.5) adjustment += 0.1;
+    return clamp(adjustment, 0, 1);
+  }
+
+  private getRating(score: number): 'EXTREME OPPORTUNITY' | 'HIGH OPPORTUNITY' | 'MODERATE OPPORTUNITY' | 'LOW OPPORTUNITY' | 'AVOID' {
+    if (score >= 90) return 'EXTREME OPPORTUNITY';
+    if (score >= 75) return 'HIGH OPPORTUNITY';
+    if (score >= 50) return 'MODERATE OPPORTUNITY';
+    if (score >= 25) return 'LOW OPPORTUNITY';
+    return 'AVOID';
+  }
+
+  private buildEntryStrategy(
+    eoiScore: number,
+    market: MarketAnalysis,
+  ): EarlyOpportunityAnalysis['entryStrategy'] {
+    const currentPrice = market.priceTrend?.current ?? 0;
+    const change24h = market.priceTrend?.change24h ?? 0;
+    const volatility = market.volatilityScore ?? 0.5;
+
+    const suggestedEntryPrice = currentPrice > 0
+      ? round(currentPrice * (1 - (volatility * 0.5)), 8)
+      : 0;
+
+    const entryConfidence = round(clamp(eoiScore / 100, 0, 1), 2);
+    const entryTiming = change24h < -0.05
+      ? 'immediate - price dip detected'
+      : change24h > 0.1
+        ? 'wait for pullback'
+        : 'good entry window';
+
+    return { suggestedEntryPrice, entryConfidence, entryTiming };
+  }
+
+  private buildExitStrategy(
+    eoiScore: number,
+    market: MarketAnalysis,
+  ): EarlyOpportunityAnalysis['exitStrategy'] {
+    const currentPrice = market.priceTrend?.current ?? 0;
+    const volatility = market.volatilityScore ?? 0.5;
+
+    const tp1 = currentPrice > 0 ? round(currentPrice * 1.5, 8) : 0;
+    const tp2 = currentPrice > 0 ? round(currentPrice * 2.0, 8) : 0;
+    const tp3 = currentPrice > 0 ? round(currentPrice * 3.0, 8) : 0;
+    const stopLoss = currentPrice > 0 ? round(currentPrice * (1 - (0.1 + volatility * 0.15)), 8) : 0;
+
+    return {
+      suggestedExitPrice: tp2,
+      takeProfitLevels: [
+        { level: tp1, weight: 0.5 },
+        { level: tp2, weight: 0.3 },
+        { level: tp3, weight: 0.2 },
+      ],
+      stopLoss,
+    };
+  }
+
+  private calcRiskReward(market: MarketAnalysis, onchain: OnchainAnalysis): number {
+    const rugScore = onchain.rugPullIndicators?.overallRugScore ?? 0.5;
+    const volatility = market.volatilityScore ?? 0.5;
+    // Higher rug score = lower RR ratio
+    const upside = 1.5;
+    const downside = 0.1 + rugScore * 0.3 + volatility * 0.2;
+    return round(clamp(upside / Math.max(downside, 0.01), 0, 20), 2);
+  }
+
+  private generateEvidence(
+    factors: OpportunityFactors,
+    flow: FlowAnalysis,
+    onchain: OnchainAnalysis,
+    market: MarketAnalysis,
+  ): string[] {
+    const evidence: string[] = [];
+
+    if ((factors.volumeVelocity ?? 0) > 0.7) {
+      evidence.push(`High volume velocity: ${Math.round((factors.volumeVelocity ?? 0) * 100)}% growth potential`);
+    }
+    if ((factors.freshWalletGrowth ?? 0) > 0.7) {
+      evidence.push(`Strong new wallet growth: ${onchain.holderGrowth?.newHolders ?? 0} new holders`);
+    }
+    if ((factors.whaleEntry ?? 0) > 0.7) {
+      evidence.push(`Significant whale entry: ${onchain.whaleActivity?.whaleWallets ?? 0} whales`);
+    }
+    if ((factors.liquidityGrowth ?? 0) > 0.7) {
+      evidence.push(`Strong liquidity growth: $${Math.round((onchain.liquidityAnalysis?.liquidityDepth ?? 0) / 1000)}K depth`);
+    }
+    if ((factors.buyPressure ?? 0) > 0.7) {
+      evidence.push(`Extreme buy pressure: ${Math.round((flow.realtimeData?.buyPressure ?? 0) / Math.max(flow.realtimeData?.sellPressure ?? 1, 1))}x sell pressure`);
+    }
+    if ((factors.marketMomentum ?? 0) > 0.7) {
+      evidence.push(`Strong market momentum: ${Math.round((market.priceTrend?.change24h ?? 0) * 100)}% 24h gain`);
     }
 
-    /**
-     * Analyze early opportunity potential for a token
-     */
-    async analyzeToken(
-        tokenAddress: string,
-        flowAnalysis: FlowAnalysis,
-        onchainAnalysis: OnchainAnalysis,
-        marketAnalysis: MarketAnalysis
-    ): Promise<EarlyOpportunityAnalysis> {
-        // Check cache first
-        const cachedData = this.getCachedData(tokenAddress);
-        if (cachedData) {
-            return cachedData;
-        }
-
-        // Calculate Early Opportunity Index
-        const eoiScore = this.calculateEOIScore(flowAnalysis, onchainAnalysis, marketAnalysis);
-        const rating = this.getEoiRating(eoiScore);
-        const factors = this.calculateEOIFactors(flowAnalysis, onchainAnalysis, marketAnalysis);
-        const evidence = this.generateEvidence(flowAnalysis, onchainAnalysis, marketAnalysis, factors);
-
-        const analysis: EarlyOpportunityAnalysis = {
-            token: tokenAddress,
-            eoiScore,
-            rating,
-            factors,
-            evidence,
-            confidence: this.calculateConfidence(flowAnalysis, onchainAnalysis, marketAnalysis)
-        };
-
-        // Cache the result
-        this.cacheData(tokenAddress, analysis);
-
-        return analysis;
+    // Add flow patterns
+    for (const pattern of flow.patterns ?? []) {
+      if ((pattern.strength ?? 0) > 0.5) {
+        evidence.push(`${pattern.type} pattern detected (confidence: ${Math.round((pattern.strength ?? 0) * 100)}%)`);
+      }
     }
 
-    /**
-     * Calculate Early Opportunity Index score (0-100)
-     */
-    private calculateEOIScore(
-        flowAnalysis: FlowAnalysis,
-        onchainAnalysis: OnchainAnalysis,
-        marketAnalysis: MarketAnalysis
-    ): number {
-        // Calculate individual factor scores
-        const volumeVelocity = this.calculateVolumeVelocity(flowAnalysis, marketAnalysis);
-        const freshWalletGrowth = this.calculateFreshWalletGrowth(onchainAnalysis);
-        const whaleEntry = this.calculateWhaleEntry(flowAnalysis, onchainAnalysis);
-        const liquidityGrowth = this.calculateLiquidityGrowth(onchainAnalysis, marketAnalysis);
-        const buyPressure = this.calculateBuyPressure(flowAnalysis);
-        const marketMomentum = this.calculateMarketMomentum(marketAnalysis);
+    return evidence;
+  }
 
-        // Calculate opportunity factors (weighted)
-        const opportunityFactors =
-            volumeVelocity * 0.25 +
-            freshWalletGrowth * 0.20 +
-            whaleEntry * 0.20 +
-            liquidityGrowth * 0.15 +
-            buyPressure * 0.10 +
-            marketMomentum * 0.10;
+  private calculateConfidence(
+    flow: FlowAnalysis,
+    onchain: OnchainAnalysis,
+    market: MarketAnalysis,
+  ): number {
+    const avgConfidence = (
+      (flow.confidence ?? 0) * 0.4 +
+      (1 - (onchain.riskScore ?? 0.5)) * 0.3 +
+      (1 - (market.volatilityScore ?? 0.5)) * 0.2 +
+      (market.sentimentAnalysis?.sentimentScore ?? 0.5) * 0.1
+    );
+    return round(clamp(avgConfidence, 0, 1), 2);
+  }
 
-        // Adjust for risk factors
-        const riskAdjustment = this.calculateRiskAdjustment(onchainAnalysis, marketAnalysis);
-        const adjustedScore = opportunityFactors * (1 - riskAdjustment);
+  private buildEmptyAnalysis(tokenAddress: string): EarlyOpportunityAnalysis {
+    return {
+      token: tokenAddress,
+      eoiScore: 0,
+      rating: 'LOW OPPORTUNITY',
+      factors: {
+        volumeVelocity: 0, freshWalletGrowth: 0, whaleEntry: 0, liquidityGrowth: 0,
+        buyPressure: 0, marketMomentum: 0, technicalScore: 0, marketScore: 0,
+        communityScore: 0, riskScore: 0.5, momentumScore: 0, overallScore: 0,
+      },
+      evidence: ['Insufficient data for opportunity analysis'],
+      confidence: 0.3,
+      opportunityScore: 0,
+    };
+  }
 
-        // Ensure score is between 0-100
-        return Math.min(100, Math.max(0, Math.round(adjustedScore * 100)));
-    }
-
-    /**
-     * Calculate individual EOI factors
-     */
-    private calculateEOIFactors(
-        flowAnalysis: FlowAnalysis,
-        onchainAnalysis: OnchainAnalysis,
-        marketAnalysis: MarketAnalysis
-    ): EarlyOpportunityAnalysis['factors'] {
-        return {
-            volumeVelocity: this.calculateVolumeVelocity(flowAnalysis, marketAnalysis),
-            freshWalletGrowth: this.calculateFreshWalletGrowth(onchainAnalysis),
-            whaleEntry: this.calculateWhaleEntry(flowAnalysis, onchainAnalysis),
-            liquidityGrowth: this.calculateLiquidityGrowth(onchainAnalysis, marketAnalysis),
-            buyPressure: this.calculateBuyPressure(flowAnalysis),
-            marketMomentum: this.calculateMarketMomentum(marketAnalysis)
-        };
-    }
-
-    /**
-     * Calculate volume velocity score (0-1)
-     */
-    private calculateVolumeVelocity(flowAnalysis: FlowAnalysis, marketAnalysis: MarketAnalysis): number {
-        // Volume growth from flow analysis
-        const volumeGrowth = flowAnalysis.realtimeData?.volumeGrowth || 0;
-
-        // Volume change from market analysis
-        const volumeChange = marketAnalysis.volumeAnalysis.volumeChange;
-
-        // Combine factors (normalized)
-        let score = 0;
-
-        // High volume growth is good
-        if (volumeGrowth > 5) score += 0.4;
-        else if (volumeGrowth > 3) score += 0.3;
-        else if (volumeGrowth > 2) score += 0.2;
-        else if (volumeGrowth > 1) score += 0.1;
-
-        // Positive volume change is good
-        if (volumeChange > 3) score += 0.3;
-        else if (volumeChange > 2) score += 0.2;
-        else if (volumeChange > 1) score += 0.1;
-
-        // Suspicious volume reduces score
-        if (marketAnalysis.volumeAnalysis.suspiciousVolume && marketAnalysis.volumeAnalysis.suspiciousVolume > 0.7) {
-            score *= 0.5;
-        }
-
-        return Math.min(1, score);
-    }
-
-    /**
-     * Calculate fresh wallet growth score (0-1)
-     */
-    private calculateFreshWalletGrowth(onchainAnalysis: OnchainAnalysis): number {
-        const newHolders = onchainAnalysis.holderGrowth.newHolders;
-        const growthRate = onchainAnalysis.holderGrowth.growthRate;
-
-        let score = 0;
-
-        // New holder growth
-        if (newHolders > 500) score += 0.4;
-        else if (newHolders > 200) score += 0.3;
-        else if (newHolders > 100) score += 0.2;
-        else if (newHolders > 50) score += 0.1;
-
-        // Growth rate
-        if (growthRate > 0.5) score += 0.3;
-        else if (growthRate > 0.3) score += 0.2;
-        else if (growthRate > 0.1) score += 0.1;
-
-        return Math.min(1, score);
-    }
-
-    /**
-     * Calculate whale entry score (0-1)
-     */
-    private calculateWhaleEntry(flowAnalysis: FlowAnalysis, onchainAnalysis: OnchainAnalysis): number {
-        const whaleActivity = flowAnalysis.realtimeData?.whaleActivity || 0;
-        const whaleWallets = onchainAnalysis.whaleActivity.whaleWallets;
-        const concentration = onchainAnalysis.whaleActivity.concentration;
-
-        let score = 0;
-
-        // Whale activity from flow
-        if (whaleActivity > 0.9) score += 0.3;
-        else if (whaleActivity > 0.7) score += 0.2;
-        else if (whaleActivity > 0.5) score += 0.1;
-
-        // Whale wallets
-        if (whaleWallets > 5) score += 0.3;
-        else if (whaleWallets > 3) score += 0.2;
-        else if (whaleWallets > 1) score += 0.1;
-
-        // Concentration - moderate concentration is good, too high is bad
-        if (concentration > 0.3 && concentration < 0.7) score += 0.2;
-        else if (concentration >= 0.7) score *= 0.5; // Too concentrated
-
-        return Math.min(1, score);
-    }
-
-    /**
-     * Calculate liquidity growth score (0-1)
-     */
-    private calculateLiquidityGrowth(onchainAnalysis: OnchainAnalysis, marketAnalysis: MarketAnalysis): number {
-        const liquidityDepth = onchainAnalysis.liquidityAnalysis.liquidityDepth;
-        const liquidityChange = onchainAnalysis.liquidityAnalysis.liquidityChange24h;
-        const marketLiquidity = marketAnalysis.liquidityAnalysis.depth;
-
-        let score = 0;
-
-        // Liquidity depth
-        if (liquidityDepth > 5000000) score += 0.3; // > $5M
-        else if (liquidityDepth > 2000000) score += 0.2; // > $2M
-        else if (liquidityDepth > 1000000) score += 0.1; // > $1M
-
-        // Positive liquidity change is good
-        if (liquidityChange > 0.1) score += 0.3;
-        else if (liquidityChange > 0.05) score += 0.2;
-        else if (liquidityChange > 0) score += 0.1;
-
-        // Market liquidity
-        if (marketLiquidity > 5000000) score += 0.2;
-        else if (marketLiquidity > 2000000) score += 0.1;
-
-        return Math.min(1, score);
-    }
-
-    /**
-     * Calculate buy pressure score (0-1)
-     */
-    private calculateBuyPressure(flowAnalysis: FlowAnalysis): number {
-        const buyPressure = flowAnalysis.realtimeData?.buyPressure || 1;
-        const sellPressure = flowAnalysis.realtimeData?.sellPressure || 1;
-
-        // Buy/sell ratio
-        const ratio = buyPressure / sellPressure;
-
-        if (ratio > 5) return 1.0;
-        if (ratio > 3) return 0.8;
-        if (ratio > 2) return 0.6;
-        if (ratio > 1.5) return 0.4;
-        if (ratio > 1) return 0.2;
-        return 0.1;
-    }
-
-    /**
-     * Calculate market momentum score (0-1)
-     */
-    private calculateMarketMomentum(marketAnalysis: MarketAnalysis): number {
-        const priceChange24h = marketAnalysis.priceTrend.change24h;
-        const priceChange7d = marketAnalysis.priceTrend.change7d;
-        const volatility = marketAnalysis.volatilityScore;
-
-        let score = 0;
-
-        // Positive price change
-        if (priceChange24h > 0.3) score += 0.3;
-        else if (priceChange24h > 0.2) score += 0.2;
-        else if (priceChange24h > 0.1) score += 0.1;
-
-        // 7-day trend
-        if (priceChange7d > 0.5) score += 0.3;
-        else if (priceChange7d > 0.3) score += 0.2;
-        else if (priceChange7d > 0.1) score += 0.1;
-
-        // Moderate volatility is good
-        if (volatility > 0.5 && volatility < 0.8) score += 0.2;
-        else if (volatility >= 0.8) score *= 0.7; // Too volatile
-
-        return Math.min(1, score);
-    }
-
-    /**
-     * Calculate risk adjustment factor (0-1)
-     */
-    private calculateRiskAdjustment(onchainAnalysis: OnchainAnalysis, marketAnalysis: MarketAnalysis): number {
-        const rugScore = onchainAnalysis.rugPullIndicators.overallRugScore;
-        const riskScore = onchainAnalysis.riskScore;
-        const suspiciousVolume = marketAnalysis.volumeAnalysis.suspiciousVolume || 0;
-
-        // Base risk adjustment
-        let adjustment = rugScore * 0.4 + riskScore * 0.3;
-
-        // Adjust for suspicious volume
-        if (suspiciousVolume > 0.7) adjustment += 0.2;
-        else if (suspiciousVolume > 0.5) adjustment += 0.1;
-
-        return Math.min(1, adjustment);
-    }
-
-    /**
-     * Get EOI rating based on score
-     */
-    private getEoiRating(score: number): EarlyOpportunityAnalysis['rating'] {
-        if (score >= 90) return 'EXTREME OPPORTUNITY';
-        if (score >= 75) return 'HIGH OPPORTUNITY';
-        if (score >= 50) return 'MODERATE OPPORTUNITY';
-        return 'LOW OPPORTUNITY';
-    }
-
-    /**
-     * Generate evidence for the opportunity analysis
-     */
-    private generateEvidence(
-        flowAnalysis: FlowAnalysis,
-        onchainAnalysis: OnchainAnalysis,
-        marketAnalysis: MarketAnalysis,
-        factors: EarlyOpportunityAnalysis['factors']
-    ): string[] {
-        const evidence: string[] = [];
-
-        // Volume velocity
-        if (factors.volumeVelocity > 0.7) {
-            evidence.push(`High volume velocity detected: ${Math.round(factors.volumeVelocity * 100)}% growth potential`);
-        } else if (factors.volumeVelocity > 0.5) {
-            evidence.push(`Moderate volume velocity: ${Math.round(factors.volumeVelocity * 100)}% growth potential`);
-        }
-
-        // Fresh wallet growth
-        if (factors.freshWalletGrowth > 0.7) {
-            evidence.push(`Strong new wallet growth: ${onchainAnalysis.holderGrowth.newHolders} new holders (${Math.round(onchainAnalysis.holderGrowth.growthRate * 100)}% growth)`);
-        } else if (factors.freshWalletGrowth > 0.5) {
-            evidence.push(`Moderate new wallet growth: ${onchainAnalysis.holderGrowth.newHolders} new holders`);
-        }
-
-        // Whale entry
-        if (factors.whaleEntry > 0.7) {
-            evidence.push(`Significant whale entry detected: ${onchainAnalysis.whaleActivity.whaleWallets} whales controlling ${Math.round(onchainAnalysis.whaleActivity.concentration * 100)}% supply`);
-        } else if (factors.whaleEntry > 0.5) {
-            evidence.push(`Whale activity detected: ${onchainAnalysis.whaleActivity.whaleWallets} whales`);
-        }
-
-        // Liquidity growth
-        if (factors.liquidityGrowth > 0.7) {
-            evidence.push(`Strong liquidity growth: $${Math.round(onchainAnalysis.liquidityAnalysis.liquidityDepth / 1000000)}M depth (${Math.round(onchainAnalysis.liquidityAnalysis.liquidityChange24h * 100)}% change)`);
-        } else if (factors.liquidityGrowth > 0.5) {
-            evidence.push(`Moderate liquidity growth: $${Math.round(onchainAnalysis.liquidityAnalysis.liquidityDepth / 1000000)}M depth`);
-        }
-
-        // Buy pressure
-        if (factors.buyPressure > 0.7) {
-            evidence.push(`Extreme buy pressure: ${Math.round(flowAnalysis.realtimeData?.buyPressure || 0)}x sell pressure`);
-        } else if (factors.buyPressure > 0.5) {
-            evidence.push(`Strong buy pressure: ${Math.round(flowAnalysis.realtimeData?.buyPressure || 0)}x sell pressure`);
-        }
-
-        // Market momentum
-        if (factors.marketMomentum > 0.7) {
-            evidence.push(`Strong market momentum: ${Math.round(marketAnalysis.priceTrend.change24h * 100)}% 24h gain`);
-        } else if (factors.marketMomentum > 0.5) {
-            evidence.push(`Positive market momentum: ${Math.round(marketAnalysis.priceTrend.change24h * 100)}% 24h gain`);
-        }
-
-        // Add flow patterns
-        flowAnalysis.patterns.forEach(pattern => {
-            if (pattern.strength > 0.7) {
-                evidence.push(`Strong ${pattern.type} pattern detected (confidence: ${Math.round(pattern.strength * 100)}%)`);
-            } else if (pattern.strength > 0.5) {
-                evidence.push(`${pattern.type} pattern detected (confidence: ${Math.round(pattern.strength * 100)}%)`);
-            }
-        });
-
-        return evidence;
-    }
-
-    /**
-     * Calculate overall confidence score
-     */
-    private calculateConfidence(
-        flowAnalysis: FlowAnalysis,
-        onchainAnalysis: OnchainAnalysis,
-        marketAnalysis: MarketAnalysis
-    ): number {
-        // Average confidence from all sources
-        const avgConfidence = (
-            flowAnalysis.confidence * 0.4 +
-            (1 - onchainAnalysis.riskScore) * 0.3 +
-            (1 - marketAnalysis.volatilityScore) * 0.2 +
-            (marketAnalysis.sentimentAnalysis?.sentimentScore || 0) * 0.1
-        );
-
-        return parseFloat(avgConfidence.toFixed(2));
-    }
-
-    // Cache Management
-    private getCachedData(tokenAddress: string): EarlyOpportunityAnalysis | null {
-        const cached = this.cache.get(tokenAddress);
-        if (cached && Date.now() - cached.timestamp < this.cacheTTL) {
-            return cached.data;
-        }
-        return null;
-    }
-
-    private cacheData(tokenAddress: string, data: EarlyOpportunityAnalysis): void {
-        this.cache.set(tokenAddress, {
-            data,
-            timestamp: Date.now()
-        });
-    }
-
-    /**
-     * Clear cache for a specific token
-     */
-    clearCache(tokenAddress: string): void {
-        this.cache.delete(tokenAddress);
-    }
-
-    /**
-     * Clear all cached data
-     */
-    clearAllCache(): void {
-        this.cache.clear();
-    }
+  clearCache(tokenAddress?: string): void {
+    if (tokenAddress) this.cache.delete(tokenAddress);
+    else this.cache.clear();
+  }
 }

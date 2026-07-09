@@ -19,6 +19,10 @@ yarn-error.log*
 Thumbs.db
 
 # Test files — sandbox / playground (bukan unit test resmi)
+test_*.cjs
+test_*.mjs
+test_*.js
+test_*.html
 test_9router.cjs
 test_9router_final.cjs
 test_9router_v2.cjs

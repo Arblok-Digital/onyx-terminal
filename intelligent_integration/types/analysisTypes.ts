@@ -41,6 +41,17 @@ export interface IntelligenceReport {
         durationMs: number;
         routingDecision: string;
         processingSteps: string[];
+        isFallback?: boolean;
+        /** Council Ringan verdict (ECC lightweight council) */
+        councilVerdict?: {
+            architectScore: number;
+            skepticScore: number;
+            strategistScore: number;
+            consensusScore: number;
+            consensusRating: string;
+            finalVerdict: string;
+            keyTensions: string[];
+        };
     };
 }
 

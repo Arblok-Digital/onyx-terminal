@@ -1,459 +1,336 @@
 /**
- * Agent Orchestrator for Onyx Terminal
- * Coordinates multiple AI agents and synthesizes intelligence
+ * @file agentOrchestrator.ts
+ * @layer orchestrator
+ * @desc 4-Phase Agent Orchestrator for Onyx Terminal.
+ *       Phase 1 (Parallel): MarketAgent, OnchainAgent, FlowIntelligenceAgent
+ *       Phase 2 (Parallel): NarrativeAgent, SmartMoneyAgent, OpportunityAgent, SurvivalAgent
+ *       Phase 3 (Consensus): RankingCalculator + IntelligenceReportGenerator
+ *       Phase 4 (Output): Structured IntelligenceReport
+ *
+ *       No Inversify DI - plain instantiation with optional dependency injection.
+ *       All agents use HeliusDataService singleton with rate limiting (8 req/s).
+ *
+ * @exposes AgentOrchestrator
  */
 
-import { injectable } from 'inversify';
-import { TOKENS } from './core/diTokens';
-import { CircuitBreaker, CircuitBreakerError } from './core/circuitBreaker';
-
-// Lazy container getter to avoid circular dependency
-let _container: any = null;
-const getContainer = async () => {
-    if (!_container) {
-        const mod = await import('./core/inversify.config');
-        _container = mod.container;
-    }
-    return _container;
-};
-import { FlowIntelligenceAgent } from './agents/flowIntelligenceAgent';
-import { OnchainAgent } from './agents/onchainAgent';
+import { Connection } from '@solana/web3.js';
 import { MarketAgent } from './agents/marketAgent';
-import { OpportunityAgent } from './agents/opportunityAgent';
+import { OnchainAgent } from './agents/onchainAgent';
+import { FlowIntelligenceAgent } from './agents/flowIntelligenceAgent';
 import { NarrativeAgent } from './agents/narrativeAgent';
 import { SmartMoneyAgent } from './agents/smartMoneyAgent';
+import { OpportunityAgent } from './agents/opportunityAgent';
 import { SurvivalAgent } from './agents/survivalAgent';
-import { OpenRouterResearchManager } from './services/openRouterService/index';
-import { OnyxOnChainService } from './services/onyxOnChainService.js';
-import { Connection } from '@solana/web3.js';
-import {
-    IntelligenceReport,
-    FlowAnalysis,
-    OnchainAnalysis,
-    MarketAnalysis,
-    EarlyOpportunityAnalysis,
-    NarrativeAnalysis,
-    SmartMoneyAnalysis,
-    SurvivalAnalysis
+import { HeliusDataService, getHeliusDataService } from './services/heliusDataService';
+import { calculateDefaultRanking } from './core/rankingCalculator';
+import { generateIntelligenceReport } from './core/intelligenceReportGenerator';
+import { IntelligenceError } from './core/intelligenceErrors';
+import { runCouncilAnalysis, type CouncilVerdict } from './core/councilAnalyzer';
+import { consoleLogger, type AgentLogger } from './agents/agentUtils';
+import type {
+  IntelligenceReport,
+  FlowAnalysis,
+  OnchainAnalysis,
+  MarketAnalysis,
+  NarrativeAnalysis,
+  SmartMoneyAnalysis,
+  EarlyOpportunityAnalysis,
+  SurvivalAnalysis,
+  IntelligenceRanking,
 } from './types/analysisTypes';
 
-// ── Retry Config ─────────────────────────────────────────
-
-export interface RetryConfig {
-    maxRetries: number;
-    baseDelayMs: number;
-    maxDelayMs: number;
+export interface OrchestratorOptions {
+  connection?: Connection;
+  helius?: HeliusDataService;
+  logger?: AgentLogger;
 }
 
-const DEFAULT_RETRY: RetryConfig = {
-    maxRetries: 3,
-    baseDelayMs: 1000,
-    maxDelayMs: 10000,
-};
-
-/**
- * Execute an async function with exponential backoff + jitter.
- * Throws the last error if all retries are exhausted.
- */
-async function withRetry<T>(
-    fn: () => Promise<T>,
-    label: string,
-    config: RetryConfig = DEFAULT_RETRY,
-): Promise<T> {
-    let lastError: unknown;
-    for (let attempt = 0; attempt <= config.maxRetries; attempt++) {
-        try {
-            return await fn();
-        } catch (err) {
-            lastError = err;
-            // Don't retry circuit breaker rejection (circuit is OPEN)
-            if (err instanceof CircuitBreakerError) throw err;
-
-            if (attempt < config.maxRetries) {
-                const delay = Math.min(
-                    config.baseDelayMs * Math.pow(2, attempt) + Math.random() * 500,
-                    config.maxDelayMs,
-                );
-                console.warn(
-                    `[Retry] ${label} attempt ${attempt + 1}/${config.maxRetries + 1} failed, retrying in ${Math.round(delay)}ms`,
-                );
-                await new Promise(r => setTimeout(r, delay));
-            }
-        }
-    }
-    throw lastError;
-}
-
-// ── Orchestrator ─────────────────────────────────────────
-
-@injectable()
 export class AgentOrchestrator {
-    private _flowAgent?: FlowIntelligenceAgent;
-    private _onchainAgent?: OnchainAgent;
-    private _marketAgent?: MarketAgent;
-    private _opportunityAgent?: OpportunityAgent;
-    private _narrativeAgent?: NarrativeAgent;
-    private _smartMoneyAgent?: SmartMoneyAgent;
-    private _survivalAgent?: SurvivalAgent;
-    private _researchManager?: OpenRouterResearchManager;
-    protected onyxService?: OnyxOnChainService;
-    protected analysisCache: Map<string, { report: IntelligenceReport; timestamp: number }>;
-    protected cacheTTL: number = 3600000; // 1 hour
-    protected circuitBreaker: CircuitBreaker;
+  private helius: HeliusDataService;
+  private logger: AgentLogger;
 
-    constructor(connection?: Connection) {
-        this.analysisCache = new Map();
-        this.circuitBreaker = new CircuitBreaker('AgentOrchestrator', {
-            failureThreshold: 5,
-            resetTimeoutMs: 30000,
-        });
+  // Phase 1 agents
+  private marketAgent: MarketAgent;
+  private onchainAgent: OnchainAgent;
+  private flowAgent: FlowIntelligenceAgent;
 
-        if (connection) {
-            this.onyxService = new OnyxOnChainService(connection);
-            console.log('[AgentOrchestrator] OnyxOnChainService initialized');
-        }
-    }
+  // Phase 2 agents
+  private narrativeAgent: NarrativeAgent;
+  private smartMoneyAgent: SmartMoneyAgent;
+  private opportunityAgent: OpportunityAgent;
+  private survivalAgent: SurvivalAgent;
 
-    // Lazy getters — now async since getContainer() returns a Promise
-    protected async getFlowAgent(): Promise<FlowIntelligenceAgent> {
-        if (!this._flowAgent) {
-            const container = await getContainer();
-            this._flowAgent = container.get(TOKENS.FlowIntelligenceAgent) as FlowIntelligenceAgent;
-        }
-        return this._flowAgent!;
-    }
+  constructor(options?: OrchestratorOptions) {
+    this.helius = options?.helius ?? getHeliusDataService();
+    this.logger = options?.logger ?? consoleLogger;
 
-    protected async getOnchainAgent(): Promise<OnchainAgent> {
-        if (!this._onchainAgent) {
-            const container = await getContainer();
-            this._onchainAgent = container.get(TOKENS.OnchainAgent) as OnchainAgent;
-        }
-        return this._onchainAgent!;
-    }
+    // Phase 1
+    this.marketAgent = new MarketAgent(this.logger);
+    this.onchainAgent = new OnchainAgent(this.helius, this.logger);
+    this.flowAgent = new FlowIntelligenceAgent(this.helius, this.logger);
 
-    protected async getMarketAgent(): Promise<MarketAgent> {
-        if (!this._marketAgent) {
-            const container = await getContainer();
-            this._marketAgent = container.get(TOKENS.MarketAgent) as MarketAgent;
-        }
-        return this._marketAgent!;
-    }
+    // Phase 2
+    this.narrativeAgent = new NarrativeAgent(this.logger);
+    this.smartMoneyAgent = new SmartMoneyAgent(this.helius, this.logger);
+    this.opportunityAgent = new OpportunityAgent(this.logger);
+    this.survivalAgent = new SurvivalAgent(this.logger);
+  }
 
-    protected async getOpportunityAgent(): Promise<OpportunityAgent> {
-        if (!this._opportunityAgent) {
-            const container = await getContainer();
-            this._opportunityAgent = container.get(TOKENS.OpportunityAgent) as OpportunityAgent;
-        }
-        return this._opportunityAgent!;
-    }
+  /**
+   * Full 4-phase token analysis pipeline.
+   *
+   * Phase 1: Parallel data fetching (market, onchain, flow)
+   * Phase 2: Parallel dependent analysis (narrative, smartMoney, opportunity, survival)
+   * Phase 3: Consensus ranking aggregation
+   * Phase 4: Intelligence report generation
+   */
+  async analyzeToken(tokenAddress: string, tokenSymbol: string = 'UNKNOWN'): Promise<IntelligenceReport> {
+    const t0 = Date.now();
+    const reportId = `report_${tokenAddress.slice(0, 8)}_${Date.now()}`;
 
-    protected async getNarrativeAgent(): Promise<NarrativeAgent> {
-        if (!this._narrativeAgent) {
-            const container = await getContainer();
-            this._narrativeAgent = container.get(TOKENS.NarrativeAgent) as NarrativeAgent;
-        }
-        return this._narrativeAgent!;
-    }
+    this.logger.info(`[Orchestrator] Starting 4-phase analysis for ${tokenSymbol} (${tokenAddress.slice(0, 8)})`);
 
-    protected async getSmartMoneyAgent(): Promise<SmartMoneyAgent> {
-        if (!this._smartMoneyAgent) {
-            const container = await getContainer();
-            this._smartMoneyAgent = container.get(TOKENS.SmartMoneyAgent) as SmartMoneyAgent;
-        }
-        return this._smartMoneyAgent!;
-    }
+    try {
+      // ============================================================
+      // PHASE 1: Independent Data Fetching (Parallel)
+      // ============================================================
+      this.logger.info('[Orchestrator] Phase 1: Fetching market, onchain, flow data...');
 
-    protected async getSurvivalAgent(): Promise<SurvivalAgent> {
-        if (!this._survivalAgent) {
-            const container = await getContainer();
-            this._survivalAgent = container.get(TOKENS.SurvivalAgent) as SurvivalAgent;
-        }
-        return this._survivalAgent!;
-    }
+      const phase1Start = Date.now();
+      let flow: FlowAnalysis;
+      let onchain: OnchainAnalysis;
+      let market: MarketAnalysis;
 
-    protected async getResearchManager(): Promise<OpenRouterResearchManager> {
-        if (!this._researchManager) {
-            const container = await getContainer();
-            this._researchManager = container.get(TOKENS.OpenRouterService) as OpenRouterResearchManager;
-        }
-        return this._researchManager!;
-    }
-
-    /**
-     * Analyze a token using all available agents with retry logic.
-     */
-    async analyzeToken(
-        tokenAddress: string,
-        tokenSymbol: string = 'UNKNOWN',
-        durationMinutes: number = 30
-    ): Promise<IntelligenceReport> {
-        // Check cache first
-        const cachedReport = this.getCachedReport(tokenAddress);
-        if (cachedReport) {
-            return cachedReport;
-        }
-
-        // Wrap entire analysis in circuit breaker
-        return this.circuitBreaker.call(async () => {
-            try {
-                // Resolve agents lazily
-                const [flowAgent, onchainAgent, marketAgent] = await Promise.all([
-                    this.getFlowAgent(),
-                    this.getOnchainAgent(),
-                    this.getMarketAgent(),
-                ]);
-
-                // Core agents (independent) — each with retry
-                const [flowAnalysis, onchainAnalysis, marketAnalysis] = await Promise.all([
-                    withRetry(() => flowAgent.analyzeToken(tokenAddress, durationMinutes), 'FlowAgent'),
-                    withRetry(() => onchainAgent.analyzeToken(tokenAddress), 'OnchainAgent'),
-                    withRetry(() => marketAgent.analyzeToken(tokenAddress), 'MarketAgent'),
-                ]);
-
-                // Resolve dependent agents
-                const [opportunityAgent, narrativeAgent, smartMoneyAgent, survivalAgent] = await Promise.all([
-                    this.getOpportunityAgent(),
-                    this.getNarrativeAgent(),
-                    this.getSmartMoneyAgent(),
-                    this.getSurvivalAgent(),
-                ]);
-
-                // Dependent agents — each with retry
-                const [earlyOpportunityAnalysis, narrativeAnalysis, smartMoneyAnalysis, survivalAnalysis] =
-                    await Promise.all([
-                        withRetry(
-                            () => opportunityAgent.analyzeToken(tokenAddress, flowAnalysis, onchainAnalysis, marketAnalysis),
-                            'OpportunityAgent'
-                        ),
-                        withRetry(
-                            () => narrativeAgent.analyzeToken(tokenAddress, tokenSymbol, onchainAnalysis, marketAnalysis),
-                            'NarrativeAgent'
-                        ),
-                        withRetry(
-                            () => smartMoneyAgent.analyzeToken(tokenAddress, onchainAnalysis, flowAnalysis),
-                            'SmartMoneyAgent'
-                        ),
-                        withRetry(
-                            () => survivalAgent.analyzeToken(tokenAddress, onchainAnalysis, marketAnalysis, flowAnalysis),
-                            'SurvivalAgent'
-                        ),
-                    ]);
-
-                // Resolve research manager
-                const researchManager = await this.getResearchManager();
-
-                // Generate final report with retry
-                const report = await withRetry(
-                    () => researchManager.generateIntelligenceReport(
-                        flowAnalysis,
-                        onchainAnalysis,
-                        marketAnalysis,
-                        earlyOpportunityAnalysis,
-                        narrativeAnalysis,
-                        smartMoneyAnalysis,
-                        survivalAnalysis
-                    ),
-                    'ResearchManager'
-                );
-
-                // Cache and return
-                this.cacheReport(tokenAddress, report);
-                return report;
-            } catch (error: any) {
-                console.error('[AgentOrchestrator] Analysis failed after retries:', error);
-                return this.createErrorReport(tokenAddress, tokenSymbol, error);
-            }
-        });
-    }
-
-    /**
-     * Analyze multiple tokens in batch
-     */
-    async analyzeMultipleTokens(
-        tokenAddresses: string[],
-        tokenSymbols: string[] = [],
-        durationMinutes: number = 30
-    ): Promise<IntelligenceReport[]> {
-        return Promise.all(
-            tokenAddresses.map((address, index) =>
-                this.analyzeToken(address, tokenSymbols[index] || 'UNKNOWN', durationMinutes)
-            )
+      try {
+        [flow, onchain, market] = await Promise.all([
+          this.flowAgent.analyzeToken(tokenAddress),
+          this.onchainAgent.analyzeToken(tokenAddress),
+          this.marketAgent.analyzeToken(tokenAddress, tokenSymbol),
+        ]);
+      } catch (phase1Error) {
+        this.logger.error('[Orchestrator] Phase 1 partial failure', phase1Error);
+        // Throw typed error instead of silent empty data
+        // Phase 2 depends on Phase 1 data — no point continuing with garbage
+        throw new IntelligenceError(
+          `Phase 1 data fetching failed for ${tokenSymbol}`,
+          'ANALYSIS_FAILED',
+          'phase1',
+          { originalError: phase1Error },
         );
-    }
+      }
 
-    private getCachedReport(tokenAddress: string): IntelligenceReport | null {
-        const cached = this.analysisCache.get(tokenAddress);
-        if (cached && Date.now() - cached.timestamp < this.cacheTTL) {
-            return cached.report;
-        }
-        return null;
-    }
+      this.logger.info(`[Orchestrator] Phase 1 complete in ${Date.now() - phase1Start}ms`, {
+        flowPatterns: flow.patterns?.length ?? 0,
+        onchainRisk: onchain.riskScore,
+        marketVol: market.volatilityScore,
+      });
 
-    protected cacheReport(tokenAddress: string, report: IntelligenceReport): void {
-        this.analysisCache.set(tokenAddress, {
-            report,
-            timestamp: Date.now()
+      // ============================================================
+      // PHASE 2: Dependent Analysis (Parallel, uses Phase 1 outputs)
+      // ============================================================
+      this.logger.info('[Orchestrator] Phase 2: Running narrative, smartMoney, opportunity, survival...');
+
+      const phase2Start = Date.now();
+      let narrative: NarrativeAnalysis;
+      let smartMoney: SmartMoneyAnalysis;
+      let opportunity: EarlyOpportunityAnalysis;
+      let survival: SurvivalAnalysis;
+
+      try {
+        [narrative, smartMoney, opportunity, survival] = await Promise.all([
+          this.narrativeAgent.analyzeToken(tokenAddress, tokenSymbol, onchain, market),
+          this.smartMoneyAgent.analyzeToken(tokenAddress, onchain, flow),
+          this.opportunityAgent.analyzeToken(tokenAddress, flow, onchain, market),
+          this.survivalAgent.analyzeToken(tokenAddress, onchain, market, flow),
+        ]);
+      } catch (phase2Error) {
+        this.logger.error('[Orchestrator] Phase 2 partial failure', phase2Error);
+        // Throw typed error — Phase 2 analysis depends on real data
+        throw new IntelligenceError(
+          `Phase 2 analysis failed for ${tokenSymbol}`,
+          'ANALYSIS_FAILED',
+          'phase2',
+          { originalError: phase2Error },
+        );
+      }
+
+      this.logger.info(`[Orchestrator] Phase 2 complete in ${Date.now() - phase2Start}ms`, {
+        narrative: narrative.narrative,
+        smartMoneyScore: smartMoney.smartMoneyScore,
+        eoiScore: opportunity.eoiScore,
+        survivalProb: survival.survivalProbability,
+      });
+
+      // ============================================================
+      // PHASE 2.5: Council Ringan (ECC-style lightweight council)
+      //   3 voices evaluate the complete data set:
+      //     - Architect: long-term structural quality
+      //     - Skeptic: critical risk analysis
+      //     - Strategist: synthesis & final verdict
+      // ============================================================
+      this.logger.info('[Orchestrator] Phase 2.5: Running Council Ringan analysis...');
+
+      const councilStart = Date.now();
+      let council: CouncilVerdict;
+
+      try {
+        council = runCouncilAnalysis(
+          flow,
+          onchain,
+          market,
+          narrative,
+          smartMoney,
+          opportunity,
+          survival,
+        );
+      } catch (councilError) {
+        this.logger.error('[Orchestrator] Council analysis failed', councilError);
+        // Council failure doesn't block the pipeline — ranking will use raw scores
+        council = null as unknown as CouncilVerdict;
+      }
+
+      if (council) {
+        this.logger.info(`[Orchestrator] Council complete in ${Date.now() - councilStart}ms`, {
+          architect: `${council.architect.score}/100`,
+          skeptic: `${council.skeptic.score}/100`,
+          strategist: `${council.strategist.score}/100`,
+          verdict: council.consensusRating,
+          tensions: council.keyTensions.length,
         });
-    }
 
-    protected createErrorReport(
-        tokenAddress: string,
-        tokenSymbol: string = 'UNKNOWN',
-        _error?: any
-    ): IntelligenceReport {
-        return {
-            id: `error-${tokenAddress}-${Date.now()}`,
-            timestamp: Date.now(),
-            tokenAddress,
-            tokenSymbol,
-            flowAnalysis: {
-                token: tokenAddress,
-                inflow: 0,
-                outflow: 0,
-                netFlow: 0,
-                majorInflows: [],
-                majorOutflows: [],
-                exchangeFlow: { inflowToExchanges: 0, outflowFromExchanges: 0, netExchangeFlow: 0 },
-                anomalousTransactions: []
-            },
-            onchainAnalysis: {
-                token: tokenAddress,
-                whaleActivity: { largeTransfers: 0, whaleWallets: 0, concentration: 0 },
-                holderGrowth: { newHolders: 0, growthRate: 0 },
-                developerActivity: {
-                    devWalletTransactions: 0,
-                    suspiciousTransfers: 0,
-                    devWalletBalance: 0,
-                    devWallets: []
-                },
-                liquidityAnalysis: {
-                    liquidityDepth: 0,
-                    liquidityChange24h: 0,
-                    lockedLiquidity: 0,
-                    liquidityConcentration: 0
-                },
-                rugPullIndicators: {
-                    dumpScore: 0,
-                    liquidityRemovalScore: 0,
-                    devWalletActivityScore: 0,
-                    overallRugScore: 0
-                },
-                riskScore: 0.5,
-                contractAnalysis: {
-                    age: 0,
-                    creator: 'Unknown',
-                    mintAuthority: false,
-                    freezeAuthority: false,
-                    isVerified: false,
-                    renounced: false
-                }
-            },
-            marketAnalysis: {
-                token: tokenAddress,
-                priceTrend: { current: 0, change24h: 0, change7d: 0 },
-                volumeAnalysis: { volume24h: 0, volumeChange: 0 },
-                liquidityAnalysis: { depth: 0, slippage: 0 },
-                volatilityScore: 0,
-                marketCap: 0,
-                sentimentAnalysis: {
-                    sentimentScore: 0,
-                    positiveMentions: 0,
-                    negativeMentions: 0,
-                    neutralMentions: 0,
-                    sentimentTrend: 0,
-                    source: 'error'
-                }
-            },
-            opportunityAnalysis: {
-                token: tokenAddress,
-                opportunityScore: 0,
-                entryStrategy: { suggestedEntryPrice: 0, entryConfidence: 0, entryTiming: 'N/A' },
-                exitStrategy: {
-                    suggestedExitPrice: 0,
-                    takeProfitLevels: [],
-                    stopLoss: 0
-                },
-                riskRewardRatio: 0,
-                predictedPotential: { shortTerm: 0, midTerm: 0, longTerm: 0 },
-                discoveryTimestamp: Date.now(),
-                validationMetrics: {
-                    liquidityCheck: false,
-                    holderDistribution: 'healthy',
-                    contractSafety: 'unknown',
-                    socialVolume: 0
-                },
-                competitionAnalysis: {
-                    marketShare: 0,
-                    comparableProjects: [],
-                    uniqueAdvantages: []
-                }
-            },
-            narrativeAnalysis: {
-                token: tokenAddress,
-                narrativeScore: 0,
-                trendingTopics: [],
-                communitySentiment: { overall: 0, breakdown: { twitter: 0, discord: 0, telegram: 0 } },
-                influencerActivity: { totalInfluencers: 0, positiveMentions: 0, negativeMentions: 0, topInfluencers: [] },
-                brandHealth: { awareness: 0, trustLevel: 0, communityEngagement: 0 },
-                competitivePositioning: {
-                    marketSegment: 'Unknown',
-                    uniqueSellingPoints: [],
-                    threatLevel: 0,
-                    competitorMentions: []
-                }
-            },
-            smartMoneyAnalysis: {
-                token: tokenAddress,
-                smartMoneyScore: 0,
-                trackedWallets: [],
-                capitalFlows: {
-                    inflow24h: 0,
-                    outflow24h: 0,
-                    netFlow: 0,
-                    significantTransactions: []
-                },
-                accumulationPattern: {
-                    isAccumulating: false,
-                    accumulationRate: 0,
-                    averageEntryPrice: 0,
-                    smartMoneyConfidence: 0
-                },
-                correlationAnalysis: { correlatedTokens: [], marketCorrelation: 0 }
-            },
-            survivalAnalysis: {
-                token: tokenAddress,
-                survivalScore: 0,
-                liquidityHealth: { ratio: 0, depth: 0, volatility: 0, sustainability: 'critical' },
-                holderRetention: { retentionRate: 0, averageHoldingPeriod: 0, churnRate: 0 },
-                marketResilience: { priceStability: 0, recoveryRate: 0, crashResistance: 0 },
-                riskMetrics: {
-                    impermanentLossRisk: 0,
-                    liquidationRisk: 0,
-                    regulatoryRisk: 0,
-                    overallRisk: 'high'
-                },
-                sustainabilityIndicators: {
-                    revenueModel: 'Unknown',
-                    tokenEmissionRate: 0,
-                    stakingParticipation: 0,
-                    treasuryHealth: 0
-                },
-                timelineForecast: { shortTerm: 'bearish', midTerm: 'bearish', longTerm: 'bearish', confidence: 0 }
-            },
-            summary: `Analysis failed for ${tokenAddress}`,
-            recommendations: ['Unable to provide recommendation due to analysis failure']
-        };
-    }
+        // Log warnings from Skeptic for visibility
+        council.skeptic.warnings.forEach(w => this.logger.warn(`[Council:Skeptic] ${w}`));
+      } else {
+        this.logger.warn('[Orchestrator] Council skipped — proceeding with standard ranking.');
+      }
 
-    clearTokenCache(tokenAddress: string): void {
-        this.analysisCache.delete(tokenAddress);
-    }
+      // ============================================================
+      // PHASE 3: Consensus Ranking
+      // ============================================================
+      this.logger.info('[Orchestrator] Phase 3: Computing consensus ranking...');
 
-    clearAllCache(): void {
-        this.analysisCache.clear();
-    }
+      const ranking: IntelligenceRanking = calculateDefaultRanking(
+        opportunity,
+        onchain,
+        smartMoney,
+        survival,
+        narrative,
+      );
 
-    getCacheSize(): number {
-        return this.analysisCache.size;
+      // ============================================================
+      // PHASE 4: Intelligence Report Generation
+      // ============================================================
+      this.logger.info('[Orchestrator] Phase 4: Generating intelligence report...');
+
+      const report = generateIntelligenceReport(
+        flow,
+        onchain,
+        market,
+        opportunity,
+        narrative,
+        smartMoney,
+        survival,
+        ranking,
+      );
+
+      // Inject council insights into the report
+      const councilInsights = council ? [
+        ...council.skeptic.warnings.slice(0, 3).map(w => ({
+          category: 'council-skeptic' as const,
+          insight: w,
+          confidence: council.skeptic.confidence,
+        })),
+        ...council.architect.findings.slice(0, 2).map(f => ({
+          category: 'council-architect' as const,
+          insight: f,
+          confidence: council.architect.confidence,
+        })),
+        {
+          category: 'council-verdict' as const,
+          insight: council.finalVerdict,
+          confidence: council.strategist.confidence,
+        },
+      ] : [];
+
+      const councilRecs = council && council.consensusScore < 50
+        ? ['Council Ringan: Consensus negative — ' + council.keyTensions.join('; ')]
+        : council && council.consensusScore >= 70
+        ? ['Council Ringan: Consensus positive — ' + (council.architect.findings[0] ?? '')]
+        : [];
+
+      // Build the final IntelligenceReport
+      const totalDuration = Date.now() - t0;
+
+      const finalReport: IntelligenceReport = {
+        id: reportId,
+        timestamp: Date.now(),
+        tokenAddress,
+        tokenSymbol,
+        flowAnalysis: flow,
+        onchainAnalysis: onchain,
+        marketAnalysis: market,
+        opportunityAnalysis: opportunity,
+        narrativeAnalysis: narrative,
+        smartMoneyAnalysis: smartMoney,
+        survivalAnalysis: survival,
+        summary: report.executiveSummary,
+        executiveSummary: report.executiveSummary,
+        recommendations: [...report.recommendations, ...councilRecs],
+        keyInsights: [...report.keyInsights, ...councilInsights],
+        confidenceScore: report.confidenceScore,
+        intelligenceRanking: ranking,
+        metadata: {
+          modelUsed: 'agent_orchestrator_v2',
+          durationMs: totalDuration,
+          routingDecision: ranking.rating ?? 'unknown',
+          processingSteps: [
+            'phase1:market+onchain+flow',
+            'phase2:narrative+smartmoney+opportunity+survival',
+            'phase2.5:council_ringan',
+            'phase3:consensus_ranking',
+            'phase4:report_generation',
+          ],
+          councilVerdict: council ? {
+            architectScore: council.architect.score,
+            skepticScore: council.skeptic.score,
+            strategistScore: council.strategist.score,
+            consensusScore: council.consensusScore,
+            consensusRating: council.consensusRating,
+            finalVerdict: council.finalVerdict,
+            keyTensions: council.keyTensions,
+          } : undefined,
+        },
+      };
+
+      this.logger.info(`[Orchestrator] Full analysis complete in ${totalDuration}ms`, {
+        token: tokenSymbol,
+        rating: ranking.rating,
+        overallScore: ranking.overallScore,
+        confidence: report.confidenceScore,
+      });
+
+      return finalReport;
+    } catch (error) {
+      this.logger.error('[Orchestrator] Analysis failed catastrophically', error);
+
+      // Re-throw as typed error for the caller (AgentRouter / UI) to handle
+      throw new IntelligenceError(
+        `Analysis failed for ${tokenSymbol}`,
+        'ORCHESTRATION_FAILED',
+        'phase4',
+        { originalError: error, duration: Date.now() - t0 },
+      );
     }
+  }
+
+  /**
+   * Get the underlying HeliusDataService (for credit stats, etc.)
+   */
+  getHeliusService(): HeliusDataService {
+    return this.helius;
+  }
+
+  // NOTE: Empty analysis helpers have been removed.
+  // Previously they silently returned zero-value data that could be misinterpreted.
+  // Use IntelligenceError from ./core/intelligenceErrors instead.
 }

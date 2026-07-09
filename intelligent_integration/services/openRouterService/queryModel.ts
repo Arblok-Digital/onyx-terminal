@@ -4,20 +4,20 @@
  * @desc API query logic and fallback chain for OpenRouter service
  */
 
-import { injectable, inject } from 'inversify';
 import { getModelForTask } from './models';
 import { getSystemPrompt } from './systemPrompts';
 import { CircuitBreaker } from '../../core/circuitBreaker';
 import { getEnv } from '../../utils/getEnv';
-import { Logger } from '../../core/logger';
-import { TOKENS } from '../../core/diTokens';
+import type { Logger } from '../../core/logger';
 
-@injectable()
+// NOTE: Inversify decorator dihapus — manual DI aja
+// (@injectable / @inject dari diTokens yang udah dihapus)
+
 export class OpenRouterQueryManager {
     private breakers = new Map<string, CircuitBreaker>();
     private logger: Logger;
 
-    constructor(@inject(TOKENS.Logger) logger: Logger) {
+    constructor(logger: Logger) {
         this.logger = logger;
     }
 

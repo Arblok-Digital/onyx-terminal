@@ -10,11 +10,8 @@
  */
 
 // ── DI Container ──
-export { DiContainer, container } from './diContainer';
-
-// ── DI Tokens ──
-export { TOKENS } from './diTokens';
-export type { Token } from './diTokens';
+// NOTE: diContainer.ts & diTokens.ts dihapus — gak dipake
+// Semua agent pake manual DI (constructor injection)
 
 // ── Circuit Breaker ──
 export { CircuitBreaker, CircuitBreakerError } from './circuitBreaker';
@@ -26,7 +23,7 @@ export type { RateLimiterOptions, RateLimiterStats } from './rateLimiter';
 
 // ── Logger ──
 export { createLogger } from './logger';
-export type { Logger, LogEntry, LogLevel } from './logger';
+export type { Logger, LogEntry } from './logger';
 
 // ── Config Validator ──
 export { ConfigValidator, configValidator } from './configValidator';

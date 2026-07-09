@@ -6,9 +6,9 @@
  * Helius WS also fails with ERR_NAME_NOT_RESOLVED (requires Node.js DNS).
  * Kept for reference; will reconnect with proxy if needed.
  */
-import { injectable, inject } from 'inversify';
+// NOTE: Inversify decorator dihapus — manual DI aja
+// (@injectable / @inject dari diTokens yang udah dihapus)
 import type { Logger } from '../core/logger';
-import { TOKENS } from '../core/diTokens';
 
 const DEFAULT_WS_ENDPOINTS = {
     jupiter: 'wss://stream.jup.ag/v1/ws',
@@ -21,7 +21,6 @@ const WS_RECONNECT_DELAYS = {
     factor: 1.5,
 };
 
-@injectable()
 export class WebsocketService {
     private socket: WebSocket | null = null;
     private eventHandlers: Map<string, (data: any) => void>;
@@ -33,7 +32,7 @@ export class WebsocketService {
     private logger: Logger;
 
     constructor(
-        @inject(TOKENS.Logger) logger: Logger,
+        logger: Logger,
         private endpoint: string = DEFAULT_WS_ENDPOINTS.jupiter
     ) {
         this.logger = logger;

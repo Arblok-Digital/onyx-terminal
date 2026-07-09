@@ -231,6 +231,14 @@ interface AIConfig {
     model: string;
 }
 
+/**
+ * Ekstrak konten dari response AI — fallback ke reasoning_content kalo content kosong.
+ * Beberapa model (kaya "arblok") naruh response di field reasoning_content.
+ */
+function extractContent(msg: any): string | null {
+    return msg?.content?.trim() || msg?.reasoning_content?.trim() || null;
+}
+
 function getAIConfig(): AIConfig | null {
     // 1) 9Router Gateway (Primary AI)
     const gwUrl = import.meta.env.VITE_AI_GATEWAY_URL as string | undefined;
@@ -336,7 +344,7 @@ ${dashboardContext
         }
 
         const result = await response.json();
-        const content = result?.choices?.[0]?.message?.content?.trim();
+        const content = extractContent(result?.choices?.[0]?.message);
         if (!content) {
             throw new Error("AI returned empty response");
         }
@@ -377,11 +385,11 @@ ${dashboardContext
                 }
 
                 const result = await response.json();
-                const content = result?.choices?.[0]?.message?.content?.trim();
-                if (!content) {
+                const orContent = extractContent(result?.choices?.[0]?.message);
+                if (!orContent) {
                     throw new Error("OpenRouter returned empty response");
                 }
-                return content;
+                return orContent;
             } catch (fallbackError) {
                 console.error("[AI] OpenRouter fallback failed:", fallbackError);
                 throw new Error(`AI_FALLBACK_FAILED: ${fallbackError instanceof Error ? fallbackError.message : String(fallbackError)}`);

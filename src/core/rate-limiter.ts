@@ -17,6 +17,9 @@ export const POLL_INTERVALS = {
   PORTFOLIO: 300_000,
 } as const;
 
+/** Maximum queue size per host untuk mencegah OOM */
+const MAX_QUEUE_SIZE = 100;
+
 /** Minimum gap between two requests to the same host (ms). */
 const HOST_INTERVALS: Record<string, number> = {
   "api.dexscreener.com": 220, // 300 req/min → safe at 220ms
@@ -95,6 +98,13 @@ export function scheduleRequest<T>(
 ): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     const queue = (queues.get(host) ?? []) as Job<unknown>[];
+
+    // Cegah OOM: reject kalo queue udah penuh
+    if (queue.length >= MAX_QUEUE_SIZE) {
+      reject(new Error(`[RateLimiter] Queue full for ${host} (max ${MAX_QUEUE_SIZE}). Try again later.`));
+      return;
+    }
+
     queue.push({
       exec: exec as () => Promise<unknown>,
       resolve: resolve as (v: unknown) => void,

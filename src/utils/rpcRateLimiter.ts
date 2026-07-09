@@ -8,6 +8,7 @@
 const RATE_LIMIT_CONFIG = {
   maxRequestsPerSecond: 5,
   maxRetries: 3,
+  maxQueueSize: 50, // Maksimal antrian untuk mencegah OOM
 };
 
 interface PendingRequest {
@@ -38,6 +39,11 @@ class RpcRateLimiter {
    */
   async fetch(url: string, options: RequestInit): Promise<Response> {
     return new Promise((resolve, reject) => {
+      // Cegah OOM: reject kalo queue udah penuh
+      if (this.queue.length >= RATE_LIMIT_CONFIG.maxQueueSize) {
+        reject(new Error(`[RpcRateLimiter] Queue full (max ${RATE_LIMIT_CONFIG.maxQueueSize}). Try again later.`));
+        return;
+      }
       this.queue.push({ resolve, reject, url, options, retriesLeft: RATE_LIMIT_CONFIG.maxRetries });
       this.processQueue();
     });

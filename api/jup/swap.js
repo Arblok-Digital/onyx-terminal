@@ -13,10 +13,31 @@ const FEE_ACCOUNTS = {
   USDC: process.env.VITE_JUPITER_FEE_ACCOUNT_USDC || ""
 };
 
-export default async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
+/**
+ * Allowed origins untuk CORS.
+ * Request dari origin lain akan ditolak.
+ */
+const ALLOWED_ORIGINS = [
+  'https://arblok-digital.vercel.app',
+  'http://localhost:5173',
+  'http://localhost:3001',
+  'http://127.0.0.1:5173',
+  'http://127.0.0.1:3001',
+];
+
+/** Set CORS headers based on request origin */
+function setCorsHeaders(req, res) {
+  const origin = req.headers.origin;
+  if (origin && ALLOWED_ORIGINS.includes(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+  }
   res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, x-api-key');
+}
+
+export default async function handler(req, res) {
+  // CORS Headers — restricted, not wildcard
+  setCorsHeaders(req, res);
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 

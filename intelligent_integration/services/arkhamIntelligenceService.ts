@@ -21,7 +21,7 @@
 
 import { createLogger } from '../core/logger';
 
-const log = createLogger('ArkhamIntel', 'info');
+const log = createLogger();
 
 // ── Types ──
 
@@ -163,7 +163,7 @@ export class ArkhamIntelligenceService {
                         const msg: WSMessage = JSON.parse(event.data);
                         this.handleWSMessage(msg);
                     } catch (err) {
-                        log.error('Arkham WS parse error', { error: String(err) });
+                        log.error('Failed to parse WS message:', err instanceof Error ? err : new Error(String(err)));
                     }
                 };
 
@@ -176,7 +176,7 @@ export class ArkhamIntelligenceService {
                 };
 
                 this.ws.onerror = (err) => {
-                    log.error('Arkham WS error', { error: String(err) });
+                    log.error('Arkham WS error:', err instanceof Error ? err : new Error('WebSocket error'));
                     resolve(); // still resolve because we handle reconnect
                 };
 
@@ -185,7 +185,7 @@ export class ArkhamIntelligenceService {
                     if (!this.isConnected) resolve();
                 }, ARKHAM_CONFIG.TIMEOUT_MS);
             } catch (err) {
-                log.error('Arkham WS connection failed', { error: String(err) });
+                log.error('Arkham WS connect error:', err instanceof Error ? err : new Error(String(err)));
                 resolve();
             }
         });
@@ -280,7 +280,7 @@ export class ArkhamIntelligenceService {
             this.addressCache.set(address, { data, timestamp: Date.now() });
             return data;
         } catch (err) {
-            log.error('Arkham address lookup failed', { address, error: String(err) });
+            log.error('Arkham getAddressInfo error:', err instanceof Error ? err : new Error(String(err)));
             return null;
         }
     }
@@ -300,7 +300,7 @@ export class ArkhamIntelligenceService {
             this.entityCache.set(cacheKey, { data, timestamp: Date.now() });
             return data;
         } catch (err) {
-            log.error('Arkham entity lookup failed', { addressOrEntityId, error: String(err) });
+            log.error('Arkham getEntity error:', err instanceof Error ? err : new Error(String(err)));
             return null;
         }
     }
@@ -313,7 +313,7 @@ export class ArkhamIntelligenceService {
             const params = minValueUsd ? `?minValue=${minValueUsd}` : '';
             return await this.restRequest<ArkhamWhaleAlert[]>(`/whale-alerts${params}`);
         } catch (err) {
-            log.error('Arkham whale alerts fetch failed', { error: String(err) });
+            log.error('Arkham getWhaleAlerts error:', err instanceof Error ? err : new Error(String(err)));
             return [];
         }
     }
@@ -330,7 +330,7 @@ export class ArkhamIntelligenceService {
         try {
             return await this.restRequest(`/token/${tokenAddress}/flows`);
         } catch (err) {
-            log.error('Arkham token flow fetch failed', { tokenAddress, error: String(err) });
+            log.error('Arkham getTokenFlow error:', err instanceof Error ? err : new Error(String(err)));
             return null;
         }
     }
@@ -366,7 +366,7 @@ export class ArkhamIntelligenceService {
                 break;
 
             case 'error':
-                log.error('Arkham WS error', { error: msg.error });
+                log.error('Arkham WS error from server:', new Error(String(msg.error || msg.data)));
                 break;
 
             default:

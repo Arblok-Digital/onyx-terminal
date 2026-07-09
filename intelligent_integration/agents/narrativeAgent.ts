@@ -1,307 +1,249 @@
 /**
- * Narrative Agent for Onyx Terminal
- * Detects the underlying narrative driving token attention
+ * @file narrativeAgent.ts
+ * @layer agent
+ * @desc Narrative Agent — detects the underlying narrative driving token attention.
+ *       Uses DexScreener socials + token symbol/name for narrative detection.
+ *       Accepts OnchainAnalysis + MarketAnalysis from Phase 1 agents (feedback loop).
+ *       No Inversify DI — plain class.
+ *
+ * @exposes NarrativeAgent
  */
-import { injectable, inject } from 'inversify';
+
 import type { NarrativeAnalysis, OnchainAnalysis, MarketAnalysis } from '../types/analysisTypes';
-import type { Logger } from '../core/logger';
-import { TOKENS } from '../core/diTokens';
+import { fetchDexScreenerData, clamp, round, SimpleCache, type AgentLogger, consoleLogger } from './agentUtils';
 
-@injectable()
+interface NarrativePattern {
+  keywords: string[];
+  relatedTokens: string[];
+}
+
 export class NarrativeAgent {
-    private cache: Map<string, { data: NarrativeAnalysis, timestamp: number }>;
-    private cacheTTL: number = 3600000; // 1 hour
-    private narrativePatterns: Record<string, { keywords: string[], relatedTokens: string[] }> = {};
-    private logger: Logger;
+  private logger: AgentLogger;
+  private cache: SimpleCache<NarrativeAnalysis>;
+  private narrativePatterns: Record<string, NarrativePattern>;
 
-    constructor(@inject(TOKENS.Logger) logger: Logger) {
-        this.cache = new Map();
-        this.logger = logger;
-        this.initializeNarrativePatterns();
+  constructor(logger?: AgentLogger) {
+    this.logger = logger ?? consoleLogger;
+    this.cache = new SimpleCache(3_600_000); // 1 hour cache
+    this.narrativePatterns = this.initializePatterns();
+  }
+
+  /**
+   * Analyze token narrative.
+   * Requires Phase 1 outputs: onchainAnalysis + marketAnalysis (feedback loop).
+   */
+  async analyzeToken(
+    tokenAddress: string,
+    tokenSymbol: string,
+    onchainAnalysis: OnchainAnalysis,
+    marketAnalysis: MarketAnalysis,
+  ): Promise<NarrativeAnalysis> {
+    // Check cache
+    const cached = this.cache.get(tokenAddress);
+    if (cached) return cached;
+
+    const t0 = Date.now();
+    this.logger.info(`[NarrativeAgent] Analyzing ${tokenSymbol}`);
+
+    try {
+      // Fetch DexScreener for social data (websites, socials)
+      const dexData = await fetchDexScreenerData(tokenAddress);
+
+      // Combine all text signals for narrative detection
+      const symbolLower = tokenSymbol.toLowerCase();
+      const nameLower = dexData?.name?.toLowerCase() ?? '';
+      const socialUrls = dexData?.socials.map(s => s.url.toLowerCase()).join(' ') ?? '';
+      const websiteUrls = dexData?.websites.map(w => w.url.toLowerCase()).join(' ') ?? '';
+      const combinedText = `${symbolLower} ${nameLower} ${socialUrls} ${websiteUrls}`;
+
+      // Detect narrative
+      const narrative = this.detectNarrative(combinedText, onchainAnalysis);
+      const confidence = this.calculateConfidence(narrative, combinedText);
+      const evidence = this.generateEvidence(narrative, tokenSymbol, combinedText);
+      const narrativeStrength = this.calculateNarrativeStrength(
+        narrative, combinedText, marketAnalysis,
+      );
+
+      const relatedTokens = this.narrativePatterns[narrative]?.relatedTokens ?? [];
+
+      const analysis: NarrativeAnalysis = {
+        token: tokenAddress,
+        narrative: narrative || 'Unknown',
+        confidence,
+        evidence,
+        narrativeStrength,
+        relatedTokens,
+      };
+
+      this.cache.set(tokenAddress, analysis);
+
+      const dt = Date.now() - t0;
+      this.logger.info(`[NarrativeAgent] Complete in ${dt}ms`, { narrative, confidence, strength: narrativeStrength });
+
+      return analysis;
+    } catch (error) {
+      this.logger.error(`[NarrativeAgent] Failed for ${tokenSymbol}`, error);
+      return {
+        token: tokenAddress,
+        narrative: 'Unknown',
+        confidence: 0.3,
+        evidence: ['Analysis failed'],
+        narrativeStrength: 30,
+        relatedTokens: [],
+      };
+    }
+  }
+
+  private detectNarrative(text: string, onchain: OnchainAnalysis): string {
+    // Check each narrative pattern against combined text
+    let bestMatch = '';
+    let bestScore = 0;
+
+    for (const [narrative, pattern] of Object.entries(this.narrativePatterns)) {
+      let score = 0;
+      for (const keyword of pattern.keywords) {
+        if (text.includes(keyword)) {
+          score++;
+        }
+      }
+      if (score > bestScore) {
+        bestScore = score;
+        bestMatch = narrative;
+      }
     }
 
-    /**
-     * Initialize narrative detection patterns
-     */
-    private initializeNarrativePatterns(): void {
-        this.narrativePatterns = {
-            'AI Infrastructure': {
-                keywords: [
-                    'ai', 'artificial intelligence', 'machine learning', 'neural', 'gpu',
-                    'compute', 'inference', 'training', 'llm', 'model', 'data center'
-                ],
-                relatedTokens: ['FET', 'AGIX', 'OCEAN', 'RNDR', 'AKT']
-            },
-            'DePIN': {
-                keywords: [
-                    'depin', 'decentralized physical', 'infrastructure', 'network',
-                    'hardware', 'iot', 'mesh', 'wireless', 'storage', 'bandwidth'
-                ],
-                relatedTokens: ['HNT', 'IOT', 'MOBILE', 'AR', 'NKN']
-            },
-            'RWA': {
-                keywords: [
-                    'rwa', 'real world asset', 'tokenized', 'treasury', 'bond',
-                    'commodity', 'gold', 'real estate', 'yield', 'finance'
-                ],
-                relatedTokens: ['ONDO', 'GFI', 'MKR', 'FRAX', 'USDC']
-            },
-            'Gaming': {
-                keywords: [
-                    'game', 'gaming', 'play', 'nft', 'metaverse', 'virtual',
-                    'world', 'character', 'asset', 'reward', 'esports'
-                ],
-                relatedTokens: ['GALA', 'MANA', 'SAND', 'IMX', 'ILV']
-            },
-            'SocialFi': {
-                keywords: [
-                    'social', 'socialfi', 'creator', 'content', 'community',
-                    'engagement', 'reward', 'tipping', 'fan', 'platform'
-                ],
-                relatedTokens: ['FAN', 'STARS', 'YGG', 'LENS', 'RALLY']
-            },
-            'Meme': {
-                keywords: [
-                    'meme', 'dog', 'cat', 'funny', 'viral', 'community',
-                    'joke', 'haha', 'lol', 'fun', 'trend'
-                ],
-                relatedTokens: ['DOGE', 'SHIB', 'PEPE', 'BONK', 'WIF']
-            },
-            'DeFi': {
-                keywords: [
-                    'defi', 'decentralized finance', 'dex', 'swap', 'yield',
-                    'farming', 'liquidity', 'staking', 'lending', 'borrowing'
-                ],
-                relatedTokens: ['UNI', 'AAVE', 'COMP', 'CRV', 'SUSHI']
-            },
-            'NFT': {
-                keywords: [
-                    'nft', 'non fungible', 'digital art', 'collectible', 'pfp',
-                    'profile picture', 'blue chip', 'generative', '10k', 'avatar'
-                ],
-                relatedTokens: ['BAYC', 'MAYC', 'AZUKI', 'CLONE', 'DEGODS']
-            }
-        };
+    // Fallback: detect from on-chain behavior
+    if (!bestMatch) {
+      return this.detectNarrativeFromBehavior(onchain);
     }
 
-    /**
-     * Analyze token narrative
-     */
-    async analyzeToken(
-        tokenAddress: string,
-        tokenSymbol: string,
-        onchainAnalysis: OnchainAnalysis,
-        marketAnalysis: MarketAnalysis
-    ): Promise<NarrativeAnalysis> {
-        // Check cache first
-        const cachedData = this.getCachedData(tokenAddress);
-        if (cachedData) {
-            return cachedData;
-        }
+    return bestMatch;
+  }
 
-        // Detect narrative
-        const narrative = this.detectNarrative(tokenSymbol, onchainAnalysis);
-        const confidence = this.calculateConfidence(narrative, tokenSymbol);
-        const evidence = this.generateEvidence(narrative, tokenSymbol);
-        const narrativeStrength = this.calculateNarrativeStrength(narrative, tokenSymbol, marketAnalysis);
+  private detectNarrativeFromBehavior(onchain: OnchainAnalysis): string {
+    const newHolders = onchain.holderGrowth?.newHolders ?? 0;
+    const concentration = onchain.whaleActivity?.concentration ?? 0;
+    const liquidityDepth = onchain.liquidityAnalysis?.liquidityDepth ?? 0;
+    const isVerified = onchain.contractAnalysis?.isVerified ?? false;
 
-        const analysis: NarrativeAnalysis = {
-            token: tokenAddress,
-            narrative: narrative || 'Unknown',
-            confidence,
-            evidence,
-            narrativeStrength,
-            relatedTokens: this.narrativePatterns[narrative]?.relatedTokens || []
-        };
+    if (newHolders > 500 && concentration < 0.3) return 'Meme';
+    if (liquidityDepth > 5_000_000 && isVerified) return 'RWA';
+    return 'DeFi';
+  }
 
-        // Cache the result
-        this.cacheData(tokenAddress, analysis);
+  private calculateConfidence(narrative: string, text: string): number {
+    if (narrative === 'Unknown') return 0.3;
 
-        return analysis;
+    const pattern = this.narrativePatterns[narrative];
+    if (!pattern) return 0.5;
+
+    let matches = 0;
+    for (const keyword of pattern.keywords) {
+      if (text.includes(keyword)) matches++;
     }
 
-    /**
-     * Detect the most likely narrative for a token
-     */
-    private detectNarrative(tokenSymbol: string, onchainAnalysis: OnchainAnalysis): string {
-        // First, check for explicit narrative indicators in contract
-        const contractCreator = onchainAnalysis.contractAnalysis?.creator?.toLowerCase() || '';
+    // More keyword matches = higher confidence
+    return round(clamp(0.5 + matches * 0.15, 0, 0.95), 2);
+  }
 
-        // Check if creator is associated with known projects
-        if (contractCreator.includes('ai') || contractCreator.includes('artificial')) {
-            return 'AI Infrastructure';
-        }
-        if (contractCreator.includes('depin') || contractCreator.includes('infrastructure')) {
-            return 'DePIN';
-        }
-        if (contractCreator.includes('game') || contractCreator.includes('gaming')) {
-            return 'Gaming';
-        }
+  private generateEvidence(narrative: string, symbol: string, text: string): string[] {
+    const evidence: string[] = [];
 
-        // Check token symbol for narrative indicators
-        const symbolLower = tokenSymbol.toLowerCase();
-
-        for (const [narrative, pattern] of Object.entries(this.narrativePatterns)) {
-            for (const keyword of pattern.keywords) {
-                if (symbolLower.includes(keyword)) {
-                    return narrative;
-                }
-            }
-        }
-
-        // If no clear narrative from symbol, use default based on market behavior
-        return this.detectNarrativeFromBehavior(onchainAnalysis);
+    if (narrative === 'Unknown') {
+      evidence.push('No clear narrative detected from token symbol, name, or socials');
+      return evidence;
     }
 
-    /**
-     * Detect narrative from on-chain behavior
-     */
-    private detectNarrativeFromBehavior(onchainAnalysis: OnchainAnalysis): string {
-        // High holder growth + low concentration = likely community-driven (Meme, SocialFi)
-        if (onchainAnalysis.holderGrowth.newHolders > 500 &&
-            onchainAnalysis.whaleActivity.concentration < 0.3) {
-            return 'Meme';
-        }
+    const pattern = this.narrativePatterns[narrative];
+    if (!pattern) return evidence;
 
-        // High liquidity + low volatility = likely RWA or DeFi
-        if (onchainAnalysis.liquidityAnalysis.liquidityDepth > 5000000 &&
-            onchainAnalysis.contractAnalysis?.isVerified) {
-            return 'RWA';
-        }
-
-        // Default to DeFi for most tokens
-        return 'DeFi';
+    const symbolLower = symbol.toLowerCase();
+    for (const keyword of pattern.keywords) {
+      if (text.includes(keyword)) {
+        evidence.push(`Keyword "${keyword}" found in token metadata — matches ${narrative} narrative`);
+      }
     }
 
-    /**
-     * Calculate confidence in narrative detection
-     */
-    private calculateConfidence(narrative: string, tokenSymbol: string): number {
-        if (narrative === 'Unknown') return 0.3;
-
-        // Higher confidence for meme coins with meme-related symbols
-        if (narrative === 'Meme') {
-            const symbolLower = tokenSymbol.toLowerCase();
-            if (['dog', 'cat', 'wif', 'bonk', 'pepe'].some(word => symbolLower.includes(word))) {
-                return 0.9;
-            }
-        }
-
-        // Higher confidence for tokens with clear narrative keywords
-        const symbolLower = tokenSymbol.toLowerCase();
-        const pattern = this.narrativePatterns[narrative];
-
-        if (pattern) {
-            for (const keyword of pattern.keywords) {
-                if (symbolLower.includes(keyword)) {
-                    return 0.85;
-                }
-            }
-        }
-
-        // Default confidence
-        return 0.7;
+    if (evidence.length === 0) {
+      evidence.push(`Token exhibits characteristics of ${narrative} narrative based on on-chain behavior`);
     }
 
-    /**
-     * Generate evidence for narrative detection
-     */
-    private generateEvidence(narrative: string, tokenSymbol: string): string[] {
-        const evidence: string[] = [];
-        const symbolLower = tokenSymbol.toLowerCase();
+    evidence.push(`Related tokens in ${narrative}: ${pattern.relatedTokens.join(', ')}`);
+    return evidence;
+  }
 
-        if (narrative === 'Unknown') {
-            evidence.push('No clear narrative detected from token symbol or on-chain data');
-            return evidence;
+  private calculateNarrativeStrength(
+    narrative: string,
+    text: string,
+    market: MarketAnalysis,
+  ): number {
+    if (narrative === 'Unknown') return 30;
+
+    let score = 50;
+
+    // Sentiment boost
+    const sentiment = market.sentimentAnalysis?.sentimentScore ?? 0.5;
+    if (sentiment > 0.7) score += 20;
+    else if (sentiment > 0.5) score += 10;
+
+    // Price momentum boost
+    const change24h = market.priceTrend?.change24h ?? 0;
+    if (change24h > 0.3) score += 20;
+    else if (change24h > 0.1) score += 10;
+
+    // Keyword match boost
+    const pattern = this.narrativePatterns[narrative];
+    if (pattern) {
+      for (const keyword of pattern.keywords) {
+        if (text.includes(keyword)) {
+          score += 15;
+          break;
         }
-
-        // Add evidence based on narrative
-        const pattern = this.narrativePatterns[narrative];
-
-        if (pattern) {
-            // Check for keyword matches
-            for (const keyword of pattern.keywords) {
-                if (symbolLower.includes(keyword)) {
-                    evidence.push(`Token symbol contains "${keyword}" which is associated with ${narrative} narrative`);
-                }
-            }
-
-            // Add general evidence
-            evidence.push(`Token exhibits characteristics of ${narrative} narrative`);
-            evidence.push(`Related tokens in this narrative: ${pattern.relatedTokens.join(', ')}`);
-        }
-
-        return evidence;
+      }
     }
 
-    /**
-     * Calculate narrative strength score (0-100)
-     */
-    private calculateNarrativeStrength(
-        narrative: string,
-        tokenSymbol: string,
-        marketAnalysis: MarketAnalysis
-    ): number {
-        if (narrative === 'Unknown') return 30;
+    return Math.min(100, Math.max(0, Math.round(score)));
+  }
 
-        let score = 50; // Base score
+  private initializePatterns(): Record<string, NarrativePattern> {
+    return {
+      'AI Infrastructure': {
+        keywords: ['ai', 'artificial intelligence', 'machine learning', 'neural', 'gpu', 'compute', 'inference', 'training', 'llm', 'model', 'data center'],
+        relatedTokens: ['FET', 'AGIX', 'OCEAN', 'RNDR', 'AKT'],
+      },
+      'DePIN': {
+        keywords: ['depin', 'decentralized physical', 'infrastructure', 'network', 'hardware', 'iot', 'mesh', 'wireless', 'storage', 'bandwidth'],
+        relatedTokens: ['HNT', 'IOT', 'MOBILE', 'AR', 'NKN'],
+      },
+      'RWA': {
+        keywords: ['rwa', 'real world asset', 'tokenized', 'treasury', 'bond', 'commodity', 'gold', 'real estate', 'yield', 'finance'],
+        relatedTokens: ['ONDO', 'GFI', 'MKR', 'FRAX', 'USDC'],
+      },
+      'Gaming': {
+        keywords: ['game', 'gaming', 'play', 'nft', 'metaverse', 'virtual', 'world', 'character', 'asset', 'reward', 'esports'],
+        relatedTokens: ['GALA', 'MANA', 'SAND', 'IMX', 'ILV'],
+      },
+      'SocialFi': {
+        keywords: ['social', 'socialfi', 'creator', 'content', 'community', 'engagement', 'reward', 'tipping', 'fan', 'platform'],
+        relatedTokens: ['FAN', 'STARS', 'YGG', 'LENS', 'RALLY'],
+      },
+      'Meme': {
+        keywords: ['meme', 'dog', 'cat', 'funny', 'viral', 'community', 'joke', 'haha', 'lol', 'fun', 'trend'],
+        relatedTokens: ['DOGE', 'SHIB', 'PEPE', 'BONK', 'WIF'],
+      },
+      'DeFi': {
+        keywords: ['defi', 'decentralized finance', 'dex', 'swap', 'yield', 'farming', 'liquidity', 'staking', 'lending', 'borrowing'],
+        relatedTokens: ['UNI', 'AAVE', 'COMP', 'CRV', 'SUSHI'],
+      },
+      'NFT': {
+        keywords: ['nft', 'non fungible', 'digital art', 'collectible', 'pfp', 'profile picture', 'blue chip', 'generative', 'avatar'],
+        relatedTokens: ['BAYC', 'MAYC', 'AZUKI', 'CLONE', 'DEGODS'],
+      },
+    };
+  }
 
-        // Increase score based on sentiment
-        if (marketAnalysis.sentimentAnalysis) {
-            const sentiment = marketAnalysis.sentimentAnalysis.sentimentScore;
-            if (sentiment > 0.7) score += 20;
-            else if (sentiment > 0.5) score += 10;
-        }
-
-        // Increase score based on price momentum
-        const priceChange24h = marketAnalysis.priceTrend.change24h;
-        if (priceChange24h > 0.3) score += 20;
-        else if (priceChange24h > 0.1) score += 10;
-
-        // Increase score if token symbol contains narrative keywords
-        const symbolLower = tokenSymbol.toLowerCase();
-        const pattern = this.narrativePatterns[narrative];
-
-        if (pattern) {
-            for (const keyword of pattern.keywords) {
-                if (symbolLower.includes(keyword)) {
-                    score += 15;
-                    break;
-                }
-            }
-        }
-
-        // Cap at 100
-        return Math.min(100, score);
-    }
-
-    // Cache Management
-    private getCachedData(tokenAddress: string): NarrativeAnalysis | null {
-        const cached = this.cache.get(tokenAddress);
-        if (cached && Date.now() - cached.timestamp < this.cacheTTL) {
-            return cached.data;
-        }
-        return null;
-    }
-
-    private cacheData(tokenAddress: string, data: NarrativeAnalysis): void {
-        this.cache.set(tokenAddress, {
-            data,
-            timestamp: Date.now()
-        });
-    }
-
-    /**
-     * Clear cache for a specific token
-     */
-    clearCache(tokenAddress: string): void {
-        this.cache.delete(tokenAddress);
-    }
-
-    /**
-     * Clear all cached data
-     */
-    clearAllCache(): void {
-        this.cache.clear();
-    }
+  clearCache(tokenAddress?: string): void {
+    if (tokenAddress) this.cache.delete(tokenAddress);
+    else this.cache.clear();
+  }
 }

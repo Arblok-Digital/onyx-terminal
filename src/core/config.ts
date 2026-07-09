@@ -61,9 +61,10 @@ export const CONFIG = {
   // Use MAINNET_RPC or DEVNET_RPC explicitly instead
   SOLANA_RPC: (() => {
     const customRpc = import.meta.env.VITE_SOLANA_RPC;
+    // Prioritaskan Helius jika API key tersedia (lebih stabil, rate limit lebih tinggi)
+    if (_heliusKey) return `https://mainnet.helius-rpc.com/?api-key=${_heliusKey}`;
     if (customRpc) return customRpc;
-    // Default to mainnet for swap panel
-    return _heliusKey ? `https://mainnet.helius-rpc.com/?api-key=${_heliusKey}` : "https://api.mainnet-beta.solana.com";
+    return "https://api.mainnet-beta.solana.com";
   })(),
   
   // Feature Flags
