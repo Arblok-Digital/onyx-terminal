@@ -242,42 +242,13 @@ function extractContent(msg: any): string | null {
 function getAIConfig(): AIConfig | null {
     const isVercel = typeof window !== 'undefined' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1';
     
-    // 1) NVIDIA NIM (Primary — fastest, works everywhere, 1M context)
-    const nvidiaKey = import.meta.env.VITE_NVIDIA_API_KEY as string | undefined;
-    if (nvidiaKey && !nvidiaKey.startsWith("#") && !nvidiaKey.startsWith(" ")) {
-        return {
-            url: "https://integrate.api.nvidia.com/v1/chat/completions",
-            key: nvidiaKey,
-            model: "nvidia/nemotron-3-super-120b-a12b",
-        };
-    }
-
-    // 2) 9Router Gateway (Fallback — local only)
-    const gwUrl = import.meta.env.VITE_AI_GATEWAY_URL as string | undefined;
-    const gwKey =
-        (import.meta.env.VITE_AI_GATEWAY_KEY as string | undefined) ||
-        (import.meta.env.VITE_9ROUTER_API_KEY as string | undefined);
-    if (!isVercel && gwUrl && gwKey && !gwKey.startsWith("#") && !gwKey.startsWith(" ")) {
-        return {
-            url: `${gwUrl.replace(/\/+$/, "")}/chat/completions`,
-            key: gwKey,
-            model: "arblok",
-        };
-    }
-
-    // 3) OpenRouter (Fallback — works everywhere)
-    const orUrl = import.meta.env.VITE_OPENROUTER_ENDPOINT as string | undefined;
-    const orKey = import.meta.env.VITE_OPENROUTER_API_KEY as string | undefined;
-    const orEnabled = import.meta.env.VITE_OPENROUTER_ENABLED as string | undefined;
-    if (orUrl && orKey && !orKey.startsWith("#") && !orKey.startsWith(" ") && orEnabled === "true") {
-        return {
-            url: orUrl,
-            key: orKey,
-            model: "openai/gpt-3.5-turbo",
-        };
-    }
-
-    return null;
+    // 1) NVIDIA via proxy (works both local + Vercel — no CORS issues)
+    const proxyUrl = isVercel ? "/api/ai/chat" : "http://localhost:3001/api/ai/chat";
+    return {
+        url: proxyUrl,
+        key: "proxy",
+        model: "nvidia/nemotron-3-super-120b-a12b",
+    };
 }
 
 async function askAI(
@@ -335,12 +306,16 @@ ${dashboardContext
     messages.push({ role: "user", content: userMessage });
 
     try {
+        const headers: Record<string, string> = {
+            "Content-Type": "application/json",
+        };
+        // Only send Authorization header for direct API calls (not proxy)
+        if (cfg.key !== "proxy") {
+            headers["Authorization"] = `Bearer ${cfg.key}`;
+        }
         const response = await fetch(cfg.url, {
             method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                Authorization: `Bearer ${cfg.key}`,
-            },
+            headers,
             body: JSON.stringify({
                 model: cfg.model,
                 messages,
