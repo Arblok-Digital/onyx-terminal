@@ -44,6 +44,16 @@ export function validateEnvironment(): EnvCheckResult[] {
             : 'Missing VITE_OPENROUTER_API_KEY. AI features disabled.'
     });
 
+    // AI: NVIDIA NIM (Primary AI — fastest, works everywhere)
+    results.push({
+        key: 'VITE_NVIDIA_API_KEY',
+        present: !!import.meta.env.VITE_NVIDIA_API_KEY,
+        severity: import.meta.env.VITE_NVIDIA_API_KEY ? 'info' : 'warning',
+        message: import.meta.env.VITE_NVIDIA_API_KEY
+            ? 'NVIDIA NIM AI available (nemotron-3-super-120b) 🧠'
+            : 'Missing VITE_NVIDIA_API_KEY. AI chat falls back to OpenRouter/9Router.'
+    });
+
     // Important: Supabase
     results.push({
         key: 'VITE_SUPABASE_URL',

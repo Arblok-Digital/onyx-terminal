@@ -240,20 +240,32 @@ function extractContent(msg: any): string | null {
 }
 
 function getAIConfig(): AIConfig | null {
-    // 1) 9Router Gateway (Primary AI)
+    const isVercel = typeof window !== 'undefined' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1';
+    
+    // 1) NVIDIA NIM (Primary — fastest, works everywhere, 1M context)
+    const nvidiaKey = import.meta.env.VITE_NVIDIA_API_KEY as string | undefined;
+    if (nvidiaKey && !nvidiaKey.startsWith("#") && !nvidiaKey.startsWith(" ")) {
+        return {
+            url: "https://integrate.api.nvidia.com/v1/chat/completions",
+            key: nvidiaKey,
+            model: "nvidia/nemotron-3-super-120b-a12b",
+        };
+    }
+
+    // 2) 9Router Gateway (Fallback — local only)
     const gwUrl = import.meta.env.VITE_AI_GATEWAY_URL as string | undefined;
     const gwKey =
         (import.meta.env.VITE_AI_GATEWAY_KEY as string | undefined) ||
         (import.meta.env.VITE_9ROUTER_API_KEY as string | undefined);
-    if (gwUrl && gwKey && !gwKey.startsWith("#") && !gwKey.startsWith(" ")) {
+    if (!isVercel && gwUrl && gwKey && !gwKey.startsWith("#") && !gwKey.startsWith(" ")) {
         return {
             url: `${gwUrl.replace(/\/+$/, "")}/chat/completions`,
             key: gwKey,
-            model: "arblok", // Menggunakan model "arblok" yang lebih stabil
+            model: "arblok",
         };
     }
 
-    // 2) OpenRouter (Fallback AI — Free Models)
+    // 3) OpenRouter (Fallback — works everywhere)
     const orUrl = import.meta.env.VITE_OPENROUTER_ENDPOINT as string | undefined;
     const orKey = import.meta.env.VITE_OPENROUTER_API_KEY as string | undefined;
     const orEnabled = import.meta.env.VITE_OPENROUTER_ENABLED as string | undefined;

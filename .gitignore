@@ -89,6 +89,32 @@ CHATBOT_REBUILD_PLAN.md
 # Misc
 supabase_setup.sql
 
+# === CLEANUP: Junk files from dev ===
+$null
+nul
+dy
+bing_*.html
+ddg_lite.html
+detik.html
+landing.html
+tiktok_result.html
+github-copilot-9router-config/
+searxng-instance/
+scripts/*.py
+scripts/*.html
+scripts/*.txt
+scripts/*.log
+scripts/*.ps1
+scripts/*.cjs
+scripts/server.err
+scripts/check-db*.py
+scripts/debug_bing*.py
+scripts/search_*.py
+scripts/hasil_search*
+scripts/out*.txt
+scripts/forum_umkm_results.json
+intelligent_integration/tests/rateLimitTest.ts
+
 # Rust / Solana artifacts (biar ga ke-track)
 onyx-protocol/.gitignore
 onyx-protocol/.prettierignore
