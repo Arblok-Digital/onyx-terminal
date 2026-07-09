@@ -295,7 +295,7 @@ export async function getDashboardDataWithIntelligence(tokenAddress: string): Pr
             smartMoneyActivity: report.smartMoneyAnalysis ? 'active' : 'inactive',
             narrativeStrength: report.narrativeAnalysis?.narrativeStrength?.toString() ?? '0',
             opportunityScore: report.intelligenceRanking?.opportunityScore || 0,
-            keyInsights: report.keyInsights?.slice(0, 5).map((ki) =>
+            keyInsights: report.keyInsights?.slice(0, 5).map((ki: any) =>
                 `[${ki.category || 'general'}] ${ki.insight} (${Math.round(ki.confidence * 100)}%)`
             ) || [],
         };
@@ -314,10 +314,14 @@ export async function getDashboardDataWithIntelligence(tokenAddress: string): Pr
 export async function getDashboardContext(tokenAddress: string): Promise<string> {
     try {
         const data = await getDashboardData(tokenAddress);
+        // Only return context if we actually have market data
+        if (!data.dataAvailability.hasMarketData) {
+            return "";
+        }
         return formatDashboardContext(data);
     } catch (error) {
         console.error("[DashboardContext] Failed to get dashboard context:", error);
-        return `Error: Unable to fetch dashboard data for ${tokenAddress}`;
+        return "";
     }
 }
 

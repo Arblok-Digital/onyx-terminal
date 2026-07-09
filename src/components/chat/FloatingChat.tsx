@@ -266,17 +266,24 @@ async function askAI(
     const intent = detectIntent(userMessage);
 
     let dashboardContext = "";
+    let hasLiveData = false;
     if (tokenAddress && tokenAddress !== "N/A" && intent !== "general") {
         try {
-            dashboardContext = await getDashboardContext(tokenAddress);
-            console.log("[AI] Berhasil ambil data dashboard Onyx:", dashboardContext.slice(0, 200) + "...");
+            const ctx = await getDashboardContext(tokenAddress);
+            if (ctx && ctx.length > 0) {
+                dashboardContext = ctx;
+                hasLiveData = true;
+            } else {
+                console.log("[AI] Dashboard data kosong — token mungkin gak aktif atau address salah");
+            }
         } catch (e) {
             console.error("[AI] Gagal ambil data dashboard:", e);
-            dashboardContext = "⚠️ Data dashboard tidak tersedia untuk token ini. Jawab berdasarkan pengetahuan umummu tentang crypto trading.";
         }
     }
 
-    const systemPrompt = `Kamu adalah ONYX AI Assistant — asisten trading crypto yang membantu analisis token berdasarkan data REAL-TIME dari dashboard Onyx Terminal.
+    let systemPrompt: string;
+    if (hasLiveData) {
+        systemPrompt = `Kamu adalah ONYX AI Assistant — asisten trading crypto yang analisis token berdasarkan data REAL-TIME dari dashboard Onyx Terminal.
 
 🎯 KEMAMPUANMU:
 - Analisis token berdasarkan data market real-time (DexScreener)
@@ -287,11 +294,43 @@ async function askAI(
 
 📊 TOKEN AKTIF: ${tokenSymbol} (${tokenAddress})
 
-${dashboardContext
-            ? `📈 DATA DASHBOARD ONYX (REAL-TIME):\n${dashboardContext}\n\n✅ PENTING: Data di atas adalah data LIVE dari dashboard Onyx Terminal yang terintegrasi dengan DexScreener, WebSocket real-time feeds, dan AMD Intelligence agents. Gunakan data ini sebagai basis utama analisismu. Data ini mencakup:\n- Price movements (5m, 1h, 6h, 24h)\n- Volume analysis & transaction counts\n- Buy/sell pressure & liquidity\n- AMD Intelligence Report (rug check, smart money, narrative strength)\n- Market cap, FDV, dan token age\n\nJawab pertanyaan user dengan DETAIL menggunakan data di atas.`
-            : "⚠️ Data dashboard tidak tersedia untuk token ini. Jawab berdasarkan pengetahuan umummu tentang crypto trading."}
+📈 DATA DASHBOARD ONYX (REAL-TIME):
+${dashboardContext}
+
+✅ PENTING: Data di atas adalah data LIVE dari dashboard Onyx Terminal yang terintegrasi dengan DexScreener, WebSocket real-time feeds, dan AMD Intelligence agents. Gunakan data ini sebagai basis utama analisismu.
 
 🗣️ GAYA BICARA: Ramah, profesional, pakai emoji untuk clarity. Jawab dalam Bahasa Indonesia. Kalau ada warning penting (rug risk tinggi), kasih tau dengan jelas.`;
+    } else if (tokenAddress && tokenAddress !== "N/A") {
+        systemPrompt = `Kamu adalah ONYX AI Assistant — asisten trading crypto.
+
+📊 TOKEN: ${tokenSymbol} (${tokenAddress})
+
+⚠️ Data dashboard real-time belum tersedia untuk token ini. Mungkin token belum aktif diperdagangkan di DexScreener atau address-nya kurang tepat.
+Kamu bisa bantu user berdasarkan pengetahuan umum crypto trading, tren market, dan analisis fundamental.
+
+🎯 Yang bisa kamu lakukan:
+- Menjelaskan konsep trading & investasi crypto
+- Memberikan panduan analisis fundamental & teknikal
+- Menjawab pertanyaan seputar blockchain Solana
+- Edukasi tentang rug pull, smart money, dan market dynamics
+- Rekomendasi cara verifikasi token
+
+🗣️ GAYA BICARA: Ramah, profesional, pakai emoji untuk clarity. Jawab dalam Bahasa Indonesia.`;
+    } else {
+        systemPrompt = `Kamu adalah ONYX AI Assistant — asisten trading crypto yang membantu analisis token, market, dan strategi trading.
+
+🎯 KEMAMPUANMU:
+- Analisis token dan market crypto
+- Rug check & risk assessment
+- Deteksi smart money & whale movements
+- Analisis momentum & volume
+- Rekomendasi trading
+- Edukasi blockchain Solana
+
+💡 Untuk analisis token spesifik, minta user kasih token address / contract address.
+
+🗣️ GAYA BICARA: Ramah, profesional, pakai emoji untuk clarity. Jawab dalam Bahasa Indonesia. Kalau ada warning penting (rug risk tinggi), kasih tau dengan jelas.`;
+    }
 
     const messages: any[] = [{ role: "system", content: systemPrompt }];
 
