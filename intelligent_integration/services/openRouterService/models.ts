@@ -19,26 +19,46 @@ export interface TaskModelConfig {
 }
 
 /**
+ * NVIDIA NIM model names
+ * API-compatible model identifiers for NVIDIA NIM endpoints
+ */
+export const NVIDIA_MODELS = {
+    /** Nemotron 3 Ultra 550B — flagship deep research model (a55b = 55B active MoE) */
+    NEMOTRON_ULTRA: 'nvidia/nemotron-3-ultra-550b-a55b',
+    /** Nemotron 3 Super 120B — balanced speed/quality */
+    NEMOTRON_SUPER: 'nvidia/nemotron-3-super-120b',
+    /** Mistral Large 3 — strong reasoning */
+    MISTRAL_LARGE: 'mistralai/mistral-large-3',
+    /** Llama 3.1 8B — lightweight fallback */
+    LLAMA_8B: 'meta/llama-3.1-8b-instruct',
+} as const;
+
+/**
  * Default task model mapping
+ *
+ * Models dibagi berdasarkan kekuatan:
+ * - NVIDIA Nemotron 3 Ultra 550B: Deep reasoning, intelligence report, pattern detection
+ * - OC DeepSeek V4: Fast analysis, risk assessment
+ * - Mistral Large: Narrative, sentiment, smart money
  */
 export const TASK_MODEL_MAP: Record<string, string> = {
     // Tasks requiring deep reasoning and complex analysis
-    'intelligence_report': 'oc/deepseek-v4-flash-free', // Primary for comprehensive analysis
-    'pattern_detection': 'oc/deepseek-v4-flash-free',   // Pattern analysis and anomaly detection
+    'intelligence_report': NVIDIA_MODELS.NEMOTRON_ULTRA, // Primary for comprehensive analysis
+    'pattern_detection': NVIDIA_MODELS.NEMOTRON_ULTRA,   // Pattern analysis and anomaly detection
     'risk_assessment': 'oc/deepseek-v4-flash-free',     // Risk assessment with strong reasoning
 
     // Tasks requiring large volume processing and speed
-    'flow_analysis': 'ollama/gpt-oss:120b',            // Real-time flow data analysis
-    'market_analysis': 'ollama/gpt-oss:120b',          // Market and volume data analysis
-    'onchain_analysis': 'ollama/gpt-oss:120b',         // Large onchain data analysis
+    'flow_analysis': NVIDIA_MODELS.NEMOTRON_SUPER,     // Real-time flow data analysis
+    'market_analysis': NVIDIA_MODELS.NEMOTRON_SUPER,   // Market and volume data analysis
+    'onchain_analysis': NVIDIA_MODELS.NEMOTRON_SUPER,  // Large onchain data analysis
 
     // Tasks requiring general intelligence
-    'narrative_analysis': 'mistral/mistral-large-latest', // Narrative and sentiment analysis
-    'smart_money_analysis': 'mistral/mistral-large-latest', // Whale behavior analysis
-    'survival_analysis': 'mistral/mistral-large-latest', // Token survival prediction
+    'narrative_analysis': NVIDIA_MODELS.MISTRAL_LARGE, // Narrative and sentiment analysis
+    'smart_money_analysis': NVIDIA_MODELS.MISTRAL_LARGE, // Whale behavior analysis
+    'survival_analysis': NVIDIA_MODELS.MISTRAL_LARGE,  // Token survival prediction
 
-    // Default model (using configured "arblok" combo)
-    'default': 'arblok' // Combo includes fallback chain
+    // Default model (using NVIDIA flagship)
+    'default': NVIDIA_MODELS.NEMOTRON_ULTRA
 };
 
 /**

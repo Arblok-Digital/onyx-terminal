@@ -4,17 +4,25 @@
  * @desc API query logic and fallback chain for OpenRouter service
  */
 
-import { getModelForTask } from './models';
+import { getModelForTask, NVIDIA_MODELS } from './models';
 import { getSystemPrompt } from './systemPrompts';
 import { CircuitBreaker } from '../../core/circuitBreaker';
+import { RateLimiter } from '../../core/rateLimiter';
 import { getEnv } from '../../utils/getEnv';
 import type { Logger } from '../../core/logger';
 
 // NOTE: Inversify decorator dihapus — manual DI aja
 // (@injectable / @inject dari diTokens yang udah dihapus)
 
+/** NVIDIA NIM free tier rate limit: 40 requests per minute */
+const NVIDIA_RATE_CONFIG = {
+    tokensPerInterval: 40,
+    intervalMs: 60_000,
+};
+
 export class OpenRouterQueryManager {
     private breakers = new Map<string, CircuitBreaker>();
+    private rateLimiters = new Map<string, RateLimiter>();
     private logger: Logger;
 
     constructor(logger: Logger) {
@@ -30,6 +38,96 @@ export class OpenRouterQueryManager {
             }));
         }
         return this.breakers.get(name)!;
+    }
+
+    private getRateLimiter(name: string, config?: { tokensPerInterval: number; intervalMs: number }): RateLimiter {
+        if (!this.rateLimiters.has(name)) {
+            this.logger.info(`Creating rate limiter`, { name, config });
+            this.rateLimiters.set(name, new RateLimiter(name, config));
+        }
+        return this.rateLimiters.get(name)!;
+    }
+
+    /**
+     * Query NVIDIA NIM API with built-in rate limiting (40 RPM free tier).
+     * Falls back to standard queryModel if NVIDIA key not configured.
+     */
+    public async queryNvidia(
+        prompt: string,
+        taskType: string = 'default',
+        endpoint: string,
+        apiKey: string,
+        taskModels?: Record<string, string>,
+        retries: number = 3,
+        timeout: number = 60000,
+    ): Promise<string> {
+        if (!endpoint || !apiKey) {
+            throw new Error('NVIDIA NIM endpoint or API key not configured');
+        }
+
+        const model = getModelForTask(taskType, taskModels);
+        const systemPrompt = getSystemPrompt(taskType);
+        const breaker = this.getBreaker('nvidia');
+        const rateLimiter = this.getRateLimiter('nvidia', NVIDIA_RATE_CONFIG);
+
+        for (let attempt = 1; attempt <= retries; attempt++) {
+            try {
+                return await breaker.call(async () => {
+                    // Apply NVIDIA rate limit (40 RPM)
+                    await rateLimiter.wait();
+
+                    const timeoutPromise = new Promise<Response>((_, reject) =>
+                        setTimeout(() => reject(new Error(`NVIDIA request timed out after ${timeout}ms`)), timeout)
+                    );
+
+                    const fetchPromise = fetch(endpoint, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${apiKey}`
+                        },
+                        body: JSON.stringify({
+                            model: model,
+                            messages: [
+                                { role: 'system', content: systemPrompt },
+                                { role: 'user', content: prompt }
+                            ],
+                            temperature: 0.3,
+                            max_tokens: 2000,
+                            stream: false
+                        })
+                    });
+
+                    const response = await Promise.race([fetchPromise, timeoutPromise]);
+
+                    if (!response.ok) {
+                        const errText = await response.text().catch(() => 'Unknown error');
+                        const error = new Error(`NVIDIA API error: ${response.status} ${errText}`);
+                        this.logger.error(error.message, error);
+                        throw error;
+                    }
+
+                    const result = await response.json();
+                    const content = result.choices?.[0]?.message?.reasoning_content ||
+                        result.choices?.[0]?.message?.content ||
+                        '';
+
+                    if (!content) {
+                        this.logger.warn('NVIDIA API error: Empty response from model');
+                        throw new Error('NVIDIA API error: Empty response from model');
+                    }
+                    return content;
+                });
+            } catch (error) {
+                if (attempt === retries) {
+                    this.logger.error(`[Attempt ${attempt}/${retries}] Failed to query NVIDIA`, error as Error);
+                    throw error;
+                }
+                this.logger.warn(`[Attempt ${attempt}/${retries}] Retrying NVIDIA query`, { error: (error as Error).message });
+                await new Promise(res => setTimeout(res, 1000 * attempt));
+            }
+        }
+        throw new Error(`Failed to query NVIDIA after ${retries} attempts.`);
     }
 
     public async queryModel(
@@ -203,6 +301,19 @@ export async function queryModel(
     timeout: number = 60000,
 ): Promise<string> {
     return getDefaultInstance().queryModel(prompt, taskType, endpoint, apiKey, taskModels, modelName, retries, timeout);
+}
+
+/** Standalone queryNVIDIA function (backward-compatible) */
+export async function queryNvidia(
+    prompt: string,
+    taskType: string = 'default',
+    endpoint: string,
+    apiKey: string,
+    taskModels?: Record<string, string>,
+    retries: number = 3,
+    timeout: number = 60000,
+): Promise<string> {
+    return getDefaultInstance().queryNvidia(prompt, taskType, endpoint, apiKey, taskModels, retries, timeout);
 }
 
 /** Standalone queryOpenRouter function (backward-compatible) */

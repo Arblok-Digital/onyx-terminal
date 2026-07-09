@@ -29,7 +29,7 @@ import {
     buildSurvivalPrompt,
     buildResearchPrompt
 } from './buildPrompts';
-import { queryModel, queryOpenRouter } from './queryModel';
+import { queryModel, queryOpenRouter, queryNvidia } from './queryModel';
 import { ResponseCache } from './cache';
 import { RequestDeduplicator } from './requestDeduplicator';
 import {
@@ -49,12 +49,13 @@ import { ReportParser } from '../../reportParser';
 export class OpenRouterResearchManager {
     private endpoints: Map<string, string>;
     private currentModel: string;
-    private apiKey: string;
+    /** API keys untuk setiap provider, disimpan terpisah */
+    private nvidiaKey: string;
+    private gatewayKey: string;
+    private openRouterKey: string;
     private endpoint: string;
     /** Task-specific model mapping */
     private taskModels: Record<string, string>;
-    /** Whether the 9Router Gateway is available as primary */
-    private use9Router: boolean;
     /** Report parser instance */
     private parser: ReportParser;
     /** Response cache for AI responses */
@@ -78,31 +79,57 @@ export class OpenRouterResearchManager {
             return defaultValue;
         };
 
-        // 9Router Gateway (OpenAI-compatible endpoint)
+        // ── NVIDIA NIM (Primary AI Provider) ──
+        // Free tier: ~40 RPM, prototyping only. Production needs Enterprise license.
+        this.nvidiaKey = getEnv('VITE_NVIDIA_API_KEY', '');
+        const nvidiaEndpoint = getEnv('VITE_NVIDIA_ENDPOINT', 'https://integrate.api.nvidia.com/v1/chat/completions');
+        const hasNvidia = !!this.nvidiaKey;
+
+        // ── 9Router Gateway (Secondary — fallback kalo NVIDIA rate-limited) ──
+        // Local gateway: localhost:20128/v1. Perlu VPS 24/7 untuk production.
         const gatewayUrl = getEnv('VITE_AI_GATEWAY_URL', 'http://localhost:20128/v1');
-        const gatewayKey = getEnv('VITE_AI_GATEWAY_KEY', 'arblok');
+        this.gatewayKey = getEnv('VITE_AI_GATEWAY_KEY', 'arblok');
+        const has9Router = !!this.gatewayKey;
 
-        this.use9Router = !!gatewayKey;
-        this.endpoint = this.use9Router ? `${gatewayUrl}/chat/completions` : '';
-        this.apiKey = gatewayKey || getEnv('OPENROUTER_API_KEY', '');
+        // ── OpenRouter (Last resort fallback — free models) ──
+        this.openRouterKey = getEnv('OPENROUTER_API_KEY', '');
 
-        // Initialize endpoints map
+        // NVIDIA NIM endpoint
+        this.endpoint = hasNvidia ? nvidiaEndpoint : '';
+
+        // Fallback chain priority:
+        // 1. NVIDIA NIM (Nemotron 3 Ultra 550B — deep research, 40 RPM)
+        // 2. 9Router Gateway (local AI, unlimited, but butuh VPS)
+        // 3. OpenRouter (free models, rate limited)
         this.endpoints = new Map([
-            ['primary', this.use9Router ? `${gatewayUrl}/chat/completions` : ''],
-            ['fallback', this.use9Router ? `${gatewayUrl}/chat/completions` : ''],
-            ['last-resort', this.use9Router ? `${gatewayUrl}/chat/completions` : '']
+            ['nvidia', hasNvidia ? nvidiaEndpoint : ''],
+            ['9router', has9Router ? `${gatewayUrl}/chat/completions` : ''],
+            ['openrouter', this.openRouterKey ? 'https://openrouter.ai/api/v1/chat/completions' : ''],
         ]);
-        this.currentModel = 'primary';
+
+        // Set current model based on availability
+        this.currentModel = hasNvidia ? 'nvidia' : (has9Router ? '9router' : 'openrouter');
         this.taskModels = TASK_MODEL_MAP;
         this.parser = new ReportParser();
         // Initialize performance optimizations
         this.cache = new ResponseCache(200, 1800000); // 200 entries, 30 min TTL
         this.deduplicator = new RequestDeduplicator(30000); // 30s dedup timeout
         this.cachingEnabled = true;
+
+        console.log('[OpenRouter AI] Initialized', {
+            primary: this.currentModel,
+            nvidia: hasNvidia ? '✅ configured (40 RPM)' : '❌ not configured',
+            '9router': has9Router ? '✅ configured' : '❌ not configured',
+            openRouter: this.openRouterKey ? '✅ configured' : '❌ not configured',
+        });
     }
 
     /**
      * Query with caching and deduplication
+     * Routes to the correct provider based on current model:
+     * - 'nvidia': Uses queryNvidia() with 40 RPM rate limiter
+     * - '9router': Uses queryModel() with 9Router Gateway
+     * - 'openrouter': Uses queryOpenRouter() with OpenRouter API
      */
     private async queryWithCache(
         prompt: string,
@@ -119,14 +146,40 @@ export class OpenRouterResearchManager {
 
         // Deduplicate concurrent requests
         return this.deduplicator.dedupe(prompt, taskType, model, async () => {
-            const response = await queryModel(
-                prompt,
-                taskType,
-                this.endpoint,
-                this.apiKey,
-                this.taskModels,
-                this.currentModel
-            );
+            let response: string;
+
+            if (model === 'nvidia') {
+                // NVIDIA NIM — with 40 RPM rate limiting
+                const nvidiaEndpoint = this.endpoints.get('nvidia') || '';
+                response = await queryNvidia(
+                    prompt,
+                    taskType,
+                    nvidiaEndpoint,
+                    this.nvidiaKey,
+                    this.taskModels,
+                );
+            } else if (model === '9router') {
+                // 9Router Gateway — local, unlimited
+                const gatewayEndpoint = this.endpoints.get('9router') || '';
+                response = await queryModel(
+                    prompt,
+                    taskType,
+                    gatewayEndpoint,
+                    this.gatewayKey,
+                    this.taskModels,
+                    '9router',
+                );
+            } else {
+                // OpenRouter — external API (fallback via queryOpenRouter)
+                response = await queryModel(
+                    prompt,
+                    taskType,
+                    this.endpoint,
+                    this.openRouterKey,
+                    this.taskModels,
+                    this.currentModel
+                );
+            }
 
             // Store in cache
             if (this.cachingEnabled && response) {
@@ -227,7 +280,7 @@ export class OpenRouterResearchManager {
 
     /**
      * Generate comprehensive intelligence report from multiple data sources
-     * Primary: 9Router Gateway → Fallback: OpenRouter (free models)
+     * Primary: NVIDIA NIM (Nemotron 3 Ultra 550B) → 9Router Gateway → OpenRouter (free models)
      */
     async generateIntelligenceReport(
         flowAnalysis: FlowAnalysis,
@@ -238,37 +291,59 @@ export class OpenRouterResearchManager {
         smartMoneyAnalysis?: SmartMoneyAnalysis,
         survivalAnalysis?: SurvivalAnalysis
     ): Promise<IntelligenceReport> {
+        // Try NVIDIA NIM first (primary provider)
+        if (this.endpoints.get('nvidia')) {
+            try {
+                console.log('[OpenRouter AI] Generating intelligence report with NVIDIA NIM...');
+                this.currentModel = 'nvidia';
+                const prompt = buildResearchPrompt(
+                    flowAnalysis, onchainAnalysis, marketAnalysis,
+                    earlyOpportunityAnalysis, narrativeAnalysis,
+                    smartMoneyAnalysis, survivalAnalysis
+                );
+
+                const response = await this.queryWithCache(
+                    prompt,
+                    'intelligence_report',
+                    'nvidia'
+                );
+
+                console.log('[OpenRouter AI] Intelligence report generated with NVIDIA NIM');
+                return this.parseIntelligenceResponse(
+                    response, flowAnalysis, onchainAnalysis, marketAnalysis,
+                    earlyOpportunityAnalysis, narrativeAnalysis,
+                    smartMoneyAnalysis, survivalAnalysis
+                );
+            } catch (nvidiaError) {
+                console.error('[OpenRouter AI] NVIDIA NIM failed:', nvidiaError);
+                // Fall through to 9Router
+            }
+        }
+
+        // Fallback: 9Router Gateway (kalo NVIDIA rate-limited atau error)
         try {
-            console.log('[OpenRouter AI] Generating comprehensive intelligence report...');
+            console.log('[OpenRouter AI] Generating intelligence report with 9Router Gateway...');
+            this.currentModel = '9router';
             const prompt = buildResearchPrompt(
-                flowAnalysis,
-                onchainAnalysis,
-                marketAnalysis,
-                earlyOpportunityAnalysis,
-                narrativeAnalysis,
-                smartMoneyAnalysis,
-                survivalAnalysis
+                flowAnalysis, onchainAnalysis, marketAnalysis,
+                earlyOpportunityAnalysis, narrativeAnalysis,
+                smartMoneyAnalysis, survivalAnalysis
             );
 
             const response = await this.queryWithCache(
                 prompt,
                 'intelligence_report',
-                this.currentModel
+                '9router'
             );
 
-            console.log('[OpenRouter AI] Intelligence report generated successfully');
+            console.log('[OpenRouter AI] Intelligence report generated with 9Router Gateway');
             return this.parseIntelligenceResponse(
-                response,
-                flowAnalysis,
-                onchainAnalysis,
-                marketAnalysis,
-                earlyOpportunityAnalysis,
-                narrativeAnalysis,
-                smartMoneyAnalysis,
-                survivalAnalysis
+                response, flowAnalysis, onchainAnalysis, marketAnalysis,
+                earlyOpportunityAnalysis, narrativeAnalysis,
+                smartMoneyAnalysis, survivalAnalysis
             );
         } catch (error) {
-            console.error('[OpenRouter AI] Primary AI model failed:', error);
+            console.error('[OpenRouter AI] 9Router Gateway failed:', error);
             return this.handleFallbacks(
                 flowAnalysis, onchainAnalysis, marketAnalysis,
                 earlyOpportunityAnalysis, narrativeAnalysis,
@@ -278,7 +353,8 @@ export class OpenRouterResearchManager {
     }
 
     /**
-     * Handle fallback chain: primary → fallback → last-resort → openrouter → mock
+     * Handle fallback chain: OpenRouter → mock
+     * 9Router sudah dicoba di generateIntelligenceReport(), jadi skip di sini.
      */
     private async handleFallbacks(
         flowAnalysis: FlowAnalysis,
@@ -295,48 +371,19 @@ export class OpenRouterResearchManager {
             smartMoneyAnalysis, survivalAnalysis
         );
 
-        // Try fallback model
-        if (this.endpoints.get('fallback')) {
+        // Try OpenRouter (free models fallback — last resort)
+        if (this.endpoints.get('openrouter')) {
             try {
-                console.log('[OpenRouter AI] Trying fallback AI model...');
-                this.currentModel = 'fallback';
-                const response = await this.queryWithCache(prompt, 'intelligence_report', this.currentModel);
+                console.log('[OpenRouter AI] Trying OpenRouter (free models fallback)...');
+                this.currentModel = 'openrouter';
+                const response = await queryOpenRouter(prompt, this.openRouterKey);
                 return this.parseIntelligenceResponse(
                     response, flowAnalysis, onchainAnalysis, marketAnalysis,
                     earlyOpportunityAnalysis, narrativeAnalysis, smartMoneyAnalysis, survivalAnalysis
                 );
-            } catch (fallbackError) {
-                console.error('[OpenRouter AI] Fallback AI model failed:', fallbackError);
+            } catch (openRouterError) {
+                console.error('[OpenRouter AI] OpenRouter fallback failed:', openRouterError);
             }
-        }
-
-        // Try last-resort model
-        if (this.endpoints.get('last-resort')) {
-            try {
-                console.log('[OpenRouter AI] Trying last-resort AI model...');
-                this.currentModel = 'last-resort';
-                const response = await this.queryWithCache(prompt, 'intelligence_report', this.currentModel);
-                return this.parseIntelligenceResponse(
-                    response, flowAnalysis, onchainAnalysis, marketAnalysis,
-                    earlyOpportunityAnalysis, narrativeAnalysis, smartMoneyAnalysis, survivalAnalysis
-                );
-            } catch (lastResortError) {
-                console.error('[OpenRouter AI] Last-resort AI model failed:', lastResortError);
-            }
-        }
-
-        // Try OpenRouter (free models fallback)
-        try {
-            console.log('[OpenRouter AI] Trying OpenRouter (free models fallback)...');
-            this.currentModel = 'openrouter';
-            const response = await queryOpenRouter(prompt, this.apiKey);
-            // Note: OpenRouter responses are not cached to avoid rate limits
-            return this.parseIntelligenceResponse(
-                response, flowAnalysis, onchainAnalysis, marketAnalysis,
-                earlyOpportunityAnalysis, narrativeAnalysis, smartMoneyAnalysis, survivalAnalysis
-            );
-        } catch (openRouterError) {
-            console.error('[OpenRouter AI] OpenRouter AI model failed:', openRouterError);
         }
 
         // If all AI endpoints fail, return a mock response
@@ -446,7 +493,7 @@ export class OpenRouterResearchManager {
      * Check if real API keys are available
      */
     hasRealApiKeys(): boolean {
-        return this.use9Router || !!this.apiKey;
+        return !!(this.nvidiaKey || this.gatewayKey || this.openRouterKey);
     }
 }
 
