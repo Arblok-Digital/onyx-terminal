@@ -12,7 +12,7 @@ const MINTS = {
  * Request dari origin lain akan ditolak.
  */
 const ALLOWED_ORIGINS = [
-  'https://arblok-digital.vercel.app',
+  'https://onyx-terminal.vercel.app',
   'http://localhost:5173',
   'http://localhost:3001',
   'http://127.0.0.1:5173',

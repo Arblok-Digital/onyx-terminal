@@ -1,366 +1,235 @@
 # Onyx Protocol Implementation Workflow
 
-> **Last Updated:** 2026-07-04
-> **Status:** Ready for Implementation
-> **Based on:** ONYX_ARCHITECTURE.md
+> **Last Updated:** 2026-07-21
+> **Status:** TokenAnalysis Track (Active) — Fee Treasury Track (Archived)
+> **Supersedes:** Versi lama yang ngarah ke FeeConfig/Treasury — itu udah bukan target.
+> **Lihat juga:** `ONYX_ROADMAP_2026.md` (Decision Log & roadmap lengkap)
 
 ---
 
-## 🎯 Goal
+## 🎯 Perubahan Arah
 
-Implementasi Onyx Protocol v2 yang menggantikan fee injection via Jupiter API dengan on-chain fee logic yang sepenuhnya independen.
+Dokumen ini adalah **revisi total** dari workflow sebelumnya. Perubahan utama:
 
----
-
-## 📊 Current State vs Target State
-
-| Aspect | Current (Phase 1) | Target (Phase 3) |
-|--------|-------------------|------------------|
-| **Network** | Mainnet (Swap) | Mainnet (All) |
-| **Fee Logic** | Jupiter API injection | On-chain via Onyx Protocol |
-| **Fee Collection** | ATA static accounts | Treasury PDA (dynamic) |
-| **Independence** | Dependent on Jupiter | Fully independent |
-| **Revenue** | 50 bps per swap | 50 bps per swap (on-chain) |
+| Aspek | Dulu (Salah) | Sekarang (Benar) |
+|-------|-------------|-------------------|
+| **Target protocol** | FeeConfig + Treasury PDA (custody) | OnyxConfig + TokenAnalysis (rug registry) |
+| **Fee logic** | Pindah ke on-chain | Tetap di Jupiter API (`platformFeeBps`) |
+| **Value prop** | "Punya protokol sendiri" | "On-chain intelligence — rug-score terverifikasi" |
+| **Risk profile** | Tinggi (pegang duit user) | Rendah (gak pegang duit siapapun) |
+| **Audit diperlukan** | WAJIB kalau mainnet | Tidak diperlukan (gak ada dana dikelola) |
 
 ---
 
-## 🔄 Implementation Phases
+## 📊 Arsitektur Protocol Saat Ini
 
-### Phase 1: PRODUCTION (Current) ✅
-
-**Status:** Active, generating revenue
-
-**What's Working:**
-- [x] Swap panel live di mainnet
-- [x] Fee injection via Jupiter API (`api/jup/swap.js`)
-- [x] Direct pool routing (PumpFun/Raydium/Meteora/Orca)
-- [x] Dual RPC architecture (`MAINNET_RPC` / `DEVNET_RPC`)
-- [x] Fee accounts configured (WSOL/USDC ATA)
-
-**Revenue Flow:**
 ```
-User Swap → Jupiter API → Fee Injected → ATA Treasury
-                                    ↓
-                              50 bps (0.5%)
+┌────────────────────────────────────────────┐
+│           ONYX PROTOCOL (DEVNET)            │
+├────────────────────────────────────────────┤
+│                                             │
+│  OnyxConfig (singleton PDA)                 │
+│  ├── authority: Pubkey (admin)              │
+│  ├── fee_wallet: Pubkey                     │
+│  ├── paused: bool                           │
+│  └── analysis_count: u64                    │
+│                                             │
+│  TokenAnalysis (per-mint PDA)               │
+│  ├── mint, authority                        │
+│  ├── whale_activity (3 fields)              │
+│  ├── holder_growth (2 fields)               │
+│  ├── dev_activity (3 fields)                │
+│  ├── liquidity (4 fields)                   │
+│  ├── rugpull_scores (4 fields)              │
+│  ├── risk_score                             │
+│  └── contract_analysis (4 bool + age)       │
+│                                             │
+└────────────────────────────────────────────┘
 ```
 
-**Action Items:**
-- [ ] Monitor revenue accumulation
-- [ ] Track fee collection metrics
-- [ ] Prepare ~10-20 SOL for mainnet deployment
+**BACA INI DULU sebelum ngoding:** Protocol ini **TIDAK** pegang fee/duit user. Dia cuma nyimpen data intelligence yang ditulis AI agents dan dibaca frontend. Risiko bug di sini paling-paling data analysis salah — bukan duit ilang.
 
 ---
 
-### Phase 2: DEVELOPMENT (In Progress)
+## 🔄 Phase 2: TokenAnalysis Hardening (Devnet → Mainnet)
 
-**Status:** Devnet development
+### Step 1: Auth hardening
 
-**Goal:** Build Onyx Protocol v2 smart contract
+**Masalah:** Semua orang bisa `init_token_analysis` buat mint sembarang, bisa bikin PDA dusting.
 
-#### 2.1 Smart Contract Architecture
-
-**Location:** `onyx-protocol/programs/onyx-protocol/src/`
-
-**Core Components:**
-
+**Fix:**
 ```rust
-// state.rs - Account Structures
-pub struct FeeConfig {
-    pub authority: Pubkey,           // Admin wallet
-    pub treasury: Pubkey,            // Treasury PDA
-    pub fee_bps: u16,                // Fee in basis points (50 = 0.5%)
-    pub supported_mints: Vec<Pubkey>, // WSOL, USDC, etc.
-    pub bump: u8,
-}
-
-pub struct Treasury {
-    pub fee_config: Pubkey,          // Parent FeeConfig
-    pub mint: Pubkey,                // Token mint
-    pub balance: u64,                // Accumulated fees
-    pub bump: u8,
+// instructions/init_token_analysis.rs
+// Tambah constraint: cuma config.authority yang boleh init
+fn handler(ctx: Context<InitTokenAnalysis>) -> Result<()> {
+    let config = &ctx.accounts.config;
+    let authority = &ctx.accounts.authority;
+    
+    require!(config.paused == false, ProtocolError::Paused);
+    require_keys_eq!(authority.key(), config.authority, ProtocolError::Unauthorized);
+    // ... sisanya tetap
 }
 ```
 
-**Instructions to Implement:**
+**File affected:**
+- `instructions/init_token_analysis.rs` — tambah `require_keys_eq!`
+- `state.rs` — verify `authority` field on `OnyxConfig` (udah ada)
+- **Opsional:** tambah instruction `force_close_token_analysis` buat admin reclaim PDA kalau di-squat
 
-```rust
-// instructions/mod.rs
-pub mod initialize_fee_config;   // Setup fee config PDA
-pub mod update_fee_config;       // Update fee rate, authority
-pub mod collect_fee;             // Collect fee from swap
-pub mod withdraw_treasury;       // Withdraw accumulated fees
-pub mod close_fee_config;        // Close config (admin only)
-```
+### Step 2: Wire paused flag
 
-#### 2.2 Implementation Checklist
+**Masalah:** Sekarang cuma `init_token_analysis` yang ngecek `paused`. Update & close skip.
 
-**Step 1: State Definition** (`state.rs`)
-- [ ] Define `FeeConfig` account struct
-- [ ] Define `Treasury` account struct
-- [ ] Add serialization/deserialization
-- [ ] Implement space calculation
+**Fix:** Tambah `require!(config.paused == false, ProtocolError::Paused)` di:
+- `instructions/update_token_analysis.rs`
+- `instructions/close_token_analysis.rs`
 
-**Step 2: Error Handling** (`error.rs`)
-- [ ] Define custom error codes
-- [ ] InvalidAuthority
-- [ ] InvalidMint
-- [ ] InsufficientBalance
-- [ ] FeeConfigAlreadyExists
+### Step 3: Constants — decide atau delete
 
-**Step 3: Initialize Instruction** (`instructions/initialize_fee_config.rs`)
-- [ ] Create FeeConfig PDA
-- [ ] Set authority and treasury
-- [ ] Set fee_bps (default 50)
-- [ ] Initialize supported mints
+**Masalah:** `constants.rs` deklarasiin:
+- `MIN_UPDATE_INTERVAL_SECONDS`
+- `MAX_ANALYSIS_AGE_SECONDS`
+- `StaleAnalysis` error variant di `error.rs`
 
-**Step 4: Collect Fee Instruction** (`instructions/collect_fee.rs`)
-- [ ] Validate token mint
-- [ ] Calculate fee amount
-- [ ] Transfer fee to Treasury PDA
-- [ ] Emit event for tracking
+Tapi gak ada satu pun instruction yang make ini.
 
-**Step 5: Withdraw Instruction** (`instructions/withdraw_treasury.rs`)
-- [ ] Verify authority signature
-- [ ] Check treasury balance
-- [ ] Transfer to destination wallet
-- [ ] Update treasury balance
+**Putusin:**
+- **Pilihan A:** Implementasi beneran — `update_token_analysis` tolak kalau < interval, `get_token_analysis` kasih flag `is_stale`.
+- **Pilihan B:** Hapus dari code — simpen di doc aja kalo nanti butuh.
 
-**Step 6: Update Config Instruction** (`instructions/update_fee_config.rs`)
-- [ ] Verify authority signature
-- [ ] Update fee_bps if provided
-- [ ] Update supported_mints if provided
-- [ ] Emit update event
+Gue saranin **Pilihan B dulu**. Ini premature optimization selama AI agents masih devnet & volume analysis masih kecil.
 
-#### 2.3 Testing Strategy
+### Step 4: Test coverage
 
-**Location:** `onyx-protocol/tests/onyx-protocol.ts`
+**Scope minimal** — test 4 instruction:
 
-**Test Cases:**
-- [ ] Initialize FeeConfig successfully
-- [ ] Initialize fails if already exists
-- [ ] Collect fee in WSOL
-- [ ] Collect fee in USDC
-- [ ] Collect fee fails for unsupported mint
-- [ ] Withdraw treasury by authority
-- [ ] Withdraw fails for non-authority
-- [ ] Update fee_bps
-- [ ] Update supported_mints
-- [ ] Close FeeConfig
-
-**Test Commands:**
 ```bash
 cd onyx-protocol
-anchor build
-anchor test --skip-local-validator  # Use devnet
+anchor test --skip-local-validator  # devnet
 ```
 
-#### 2.4 Devnet Deployment
+**Test cases minimal:**
+- [ ] Initialize — sukses bikin config
+- [ ] Init token analysis — sukses (authority matched)
+- [ ] Init token analysis — gagal kalau caller bukan authority
+- [ ] Update token analysis — sukses (field terupdate)
+- [ ] Close token analysis — sukses
+- [ ] Close token analysis — gagal kalau caller bukan authority
 
-**Prerequisites:**
-- [ ] Get devnet SOL airdrop (max 2 SOL per request)
-- [ ] Wait 8 hours if rate limited
-- [ ] Ensure ~5 SOL for deployment
+### Step 5: Dogfood di devnet
 
-**Deployment Steps:**
-```bash
-# 1. Build
-anchor build
+Biarin AI agents nulis TokenAnalysis beneran ke devnet selama beberapa minggu:
+- Pantau transaction success rate
+- Cek apakah ada PDA collision atau error aneh
+- Verifikasi data yang ditulis AI agents bisa dibaca frontend dengan bener
 
-# 2. Deploy to devnet
-anchor deploy --provider.cluster devnet
+### Step 6: Mainnet deployment prep
 
-# 3. Initialize FeeConfig
-anchor run initialize
+```toml
+# Anchor.toml — tambah ini
+[programs.mainnet]
+onyx_protocol = "FjMdzw1x2zobB9UD8pcezbmzLwuHQnKMzit68Zbx87PG"  # ganti nanti
 
-# 4. Verify deployment
-anchor run verify
+[provider]
+cluster = "devnet"  # default tetep devnet sampe mainnet ready
 ```
 
-**Expected Output:**
-```
-Program ID: FjMdzw1x2zobB9UD8pcezbmzLwuHQnKMzit68Zbx87PG
-FeeConfig PDA: [derived]
-Treasury PDA (WSOL): [derived]
-Treasury PDA (USDC): [derived]
-```
+**Upgrade authority:**
+- Sementara: single wallet (deployer) — oke buat sekarang
+- Nanti: multisig/Squads setelah stabil & ada value on-chain yang harus dijaga
 
 ---
 
-### Phase 3: MIGRATION (Future)
+## 🗑️ FeeConfig/Treasury — Arsip (dulu ngaco, sekarang gak usah dikerjain)
 
-**Prerequisites:**
-- [ ] Phase 2 completed and tested thoroughly
-- [ ] Security audit (optional but recommended)
-- [ ] Sufficient SOL for mainnet deployment (~10-20 SOL)
-- [ ] Revenue from Phase 1 accumulated
+**JANGAN ngerjain ini.** Ini copium dari awal. Penjelasan lengkap di Decision Log `ONYX_ROADMAP_2026.md`.
 
-#### 3.1 Mainnet Deployment
-
-**Step 1: Prepare Wallet**
-- [ ] Transfer SOL to deployer wallet
-- [ ] Verify mainnet balance
-
-**Step 2: Deploy Program**
-```bash
-# Build for mainnet
-anchor build
-
-# Deploy to mainnet
-anchor deploy --provider.cluster mainnet
-```
-
-**Step 3: Initialize On Mainnet**
-```bash
-# Initialize FeeConfig with production values
-anchor run initialize --provider.cluster mainnet
-```
-
-**Step 4: Update Frontend**
-- [ ] Update `CONFIG.ONYX_PROGRAM_ID` with mainnet program ID
-- [ ] Update `CONFIG.ONYX_NETWORK` to `mainnet-beta`
-- [ ] Test swap with on-chain fee collection
-
-#### 3.2 Fee Logic Migration
-
-**Before (Phase 1):**
-```javascript
-// api/jup/swap.js
-const feeAccount = mint === WSOL 
-  ? process.env.VITE_JUPITER_FEE_ACCOUNT_WSOL
-  : process.env.VITE_JUPITER_FEE_ACCOUNT_USDC;
-
-// Fee injected via Jupiter API
-```
-
-**After (Phase 3):**
-```javascript
-// Swap.tsx
-const feeConfigPDA = await getFeeConfigPDA(programId);
-const treasuryPDA = await getTreasuryPDA(programId, mint);
-
-// Fee collected via on-chain instruction
-await program.methods
-  .collectFee(amount)
-  .accounts({ feeConfig: feeConfigPDA, treasury: treasuryPDA })
-  .rpc();
-```
-
-#### 3.3 Verification Checklist
-
-- [ ] Fee collected correctly on mainnet
-- [ ] Treasury PDA receives fees
-- [ ] Withdrawal works for authority
-- [ ] Swap UX unchanged for users
-- [ ] No dependency on Jupiter fee API
+Yang perlu lo tau:
+- **Gak ada kode yang ditulis** buat FeeConfig/Treasury — instructions di `ONYX_IMPLEMENTATION_WORKFLOW.md` lama itu cuma pseudocode yang gak pernah di-compile.
+- **Gak ada `fee_config.rs`** atau `treasury.rs` di `instructions/`.
+- **State struct FeeConfig & Treasury di `state.rs`** — KALAU ADA (cek dulu), itu harus dihapus.
+- **Jangan nulis ulang.** Kalau suatu saat butuh (staking discount / DAO governance), baru pikirin lagi — tapi waktu itu jangan pake doc ini sebagai referensi karena udah outdated.
 
 ---
 
-## 📁 File Reference
+## ⚡ Shortcut: Yang Bisa Dikerjain Sekarang
 
-### Smart Contract Files
-| File | Purpose | Priority |
-|------|---------|----------|
-| `onyx-protocol/programs/onyx-protocol/src/lib.rs` | Program entrypoint | Core |
-| `onyx-protocol/programs/onyx-protocol/src/state.rs` | Account structs | Core |
-| `onyx-protocol/programs/onyx-protocol/src/error.rs` | Error definitions | Core |
-| `onyx-protocol/programs/onyx-protocol/src/constants.rs` | Constants | Core |
-| `onyx-protocol/programs/onyx-protocol/src/instructions/` | Instruction handlers | Core |
+Prioritas (dari yang paling gampang & berdampak):
 
-### Frontend Files
+| # | Task | File | Waktu |
+|---|------|------|-------|
+| 1 | Check & hapus FeeConfig/Treasury state (kalau ada) | `state.rs` | 5 menit |
+| 2 | Wire paused ke update & close instructions | 2 files | 15 menit |
+| 3 | Auth guard init_token_analysis | 1 file | 10 menit |
+| 4 | Putuskan constants (saran: hapus dari code) | `constants.rs` + `error.rs` | 5 menit |
+| 5 | Test ke-4 instruction | `onyx-protocol/tests/` | 1-2 jam |
+| 6 | Dogfood devnet | — | 1-2 minggu |
+| 7 | Mainnet deployment prep | `Anchor.toml` | 30 menit |
+
+**✅ Update 2026-07-21:** Confirmed `state.rs` bersih — FeeConfig/Treasury **tidak ada di code**. Tapi `constants.rs` masih bawa 4 constant gak terpakai (`MIN_UPDATE_INTERVAL_SECONDS`, `MAX_ANALYSIS_AGE_SECONDS`, `MAX_DESCRIPTION_LEN`, `MAX_AUTHORITIES`). Todo: hapus atau implementasi. Sementara gue biarin dulu.
+
+---
+
+## 📁 File Reference (Updated)
+
+### Smart Contract Files — TokenAnalysis Track
+
+| File | Purpose | Status |
+|------|---------|--------|
+| `onyx-protocol/programs/onyx-protocol/src/lib.rs` | Program entrypoint | ✅ Done |
+| `onyx-protocol/programs/onyx-protocol/src/state.rs` | OnyxConfig + TokenAnalysis structs | ✅ Done |
+| `onyx-protocol/programs/onyx-protocol/src/error.rs` | Error definitions | ✅ Done |
+| `onyx-protocol/programs/onyx-protocol/src/constants.rs` | Constants | ⚠️ Decide to keep or delete |
+| `onyx-protocol/programs/onyx-protocol/src/instructions/initialize.rs` | Initialize config | ✅ Done |
+| `onyx-protocol/programs/onyx-protocol/src/instructions/init_token_analysis.rs` | Init analysis → **tambah auth guard** | 🔜 Phase 2 |
+| `onyx-protocol/programs/onyx-protocol/src/instructions/update_token_analysis.rs` | Update analysis → **tambah paused check** | 🔜 Phase 2 |
+| `onyx-protocol/programs/onyx-protocol/src/instructions/close_token_analysis.rs` | Close analysis → **tambah paused check** | 🔜 Phase 2 |
+
+### Frontend Files (gak berubah)
+
 | File | Purpose | Network |
 |------|---------|---------|
 | `src/panels/swap/Swap.tsx` | Swap panel UI | Mainnet |
 | `src/core/config.ts` | Network configuration | Both |
-| `src/services/onyxOnChainBridge.ts` | Protocol bridge | Devnet → Mainnet |
-| `src/lib/onyxProgram.ts` | Program IDL & connection | Devnet → Mainnet |
+| `src/services/onyxOnChainBridge.ts` | Bridge ke on-chain data → AI agents | Devnet → Mainnet |
+| `src/lib/onyxProgram.ts` | Anchor program client (borsh manual) | Devnet → Mainnet |
+| `src/lib/idl/onyx_protocol.ts` | IDL types + PDA seeds + discriminators | Devnet → Mainnet |
 
-### API Files
-| File | Purpose | Phase |
-|------|---------|-------|
-| `api/jup/quote.js` | Jupiter quote proxy | Phase 1 |
-| `api/jup/swap.js` | Jupiter swap + fee injection | Phase 1 → Phase 3 |
+### API Files (gak berubah)
+
+| File | Purpose | Keterangan |
+|------|---------|------------|
+| `api/jup/quote.js` | Jupiter quote + `platformFeeBps=50` | Phase 1 (tetap) |
+| `api/jup/swap.js` | Jupiter swap + fee injection ke ATA | Phase 1 (tetap) |
 
 ---
 
-## 🔧 Development Commands
+## 🚀 Dev Commands
 
 ```bash
-# Start development server
+# Start frontend (mainnet swap)
 npm run dev
-
-# Build frontend
-npm run build
 
 # Build smart contract
 cd onyx-protocol && anchor build
 
-# Test on devnet
+# Test di devnet
 cd onyx-protocol && anchor test --skip-local-validator
 
-# Deploy to devnet
+# Deploy ke devnet (kalau ada perubahan)
 cd onyx-protocol && anchor deploy --provider.cluster devnet
-
-# Deploy to mainnet (Phase 3)
-cd onyx-protocol && anchor deploy --provider.cluster mainnet
 ```
 
 ---
 
-## ⚠️ Important Notes
+## ⚠️ Penting
 
-1. **Don't touch Production code for Devnet testing**
-   - Swap panel (`src/panels/swap/`) is ALWAYS mainnet
-   - Protocol development happens in `onyx-protocol/`
-
-2. **Network Selection**
-   - `CONFIG.MAINNET_RPC` for swap/real transactions
-   - `CONFIG.DEVNET_RPC` for protocol development
-
-3. **Fee Logic Transition**
-   - Phase 1: Jupiter API handles fee injection
-   - Phase 3: Onyx Protocol handles fee on-chain
-
-4. **Devnet Limitations**
-   - Airdrop rate-limited to 2 SOL per 8 hours
-   - Plan deployment timing accordingly
+1. **Swap panel (`src/panels/swap/`) = MAINNET.** Jangan touch buat devnet testing.
+2. **Onyx Protocol (`onyx-protocol/`) = DEVNET** sampe Phase 2 selesai.
+3. **Fee 50bps tetep lewat Jupiter API** — gak bakal pindah ke on-chain.
+4. **TokenAnalysis gak pegang duit** — kalau ada bug, paling data analysis rusak, bukan duit ilang.
+5. **Kalau nemu referensi FeeConfig/Treasury** di code, hapus aja — itu sisa dari versi lama.
 
 ---
 
-## 📈 Success Metrics
-
-### Phase 1 (Current)
-- [ ] Revenue tracking dashboard
-- [ ] Monthly fee collection report
-- [ ] User adoption metrics
-
-### Phase 2 (Development)
-- [ ] All tests passing on devnet
-- [ ] Security review completed
-- [ ] Gas optimization verified
-
-### Phase 3 (Migration)
-- [ ] Mainnet deployment successful
-- [ ] Fee collection verified on-chain
-- [ ] Zero downtime migration
-- [ ] Jupiter independence achieved
-
----
-
-## 🚀 Quick Reference
-
-**Program ID (Devnet):**
-```
-FjMdzw1x2zobB9UD8pcezbmzLwuHQnKMzit68Zbx87PG
-```
-
-**Fee Accounts (Mainnet):**
-```
-WSOL: 7S7KfighhMhasJrVbkk8R3hKjtM73JuVLe92oXGCyNnT
-USDC: EHJqU8SEg12muMp1pb6KH4ghn4UB6rA51KYARetKdAgr
-```
-
-**Fee Rate:** 50 bps (0.5%)
-
----
-
-*This document should be updated as implementation progresses.*
+*Dokumen ini sinkron dengan `ONYX_ROADMAP_2026.md`. Kalau roadmap berubah, update kedua doc barengan.*

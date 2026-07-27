@@ -5,8 +5,18 @@
  * @endpoint POST /api/ai/chat
  */
 export default async function handler(req, res) {
-  // CORS — allow the frontend origin
-  res.setHeader("Access-Control-Allow-Origin", "*");
+  // CORS — restrict to known origins
+  const origin = req.headers.origin;
+  const ALLOWED_ORIGINS = [
+    'https://onyx-terminal.vercel.app',
+    'http://localhost:5173',
+    'http://localhost:3001',
+    'http://127.0.0.1:5173',
+    'http://127.0.0.1:3001',
+  ];
+  if (origin && ALLOWED_ORIGINS.includes(origin)) {
+    res.setHeader("Access-Control-Allow-Origin", origin);
+  }
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
   if (req.method === "OPTIONS") return res.status(200).end();

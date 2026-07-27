@@ -69,6 +69,7 @@ export class OpenRouterQueryManager {
         const systemPrompt = getSystemPrompt(taskType);
         const breaker = this.getBreaker('nvidia');
         const rateLimiter = this.getRateLimiter('nvidia', NVIDIA_RATE_CONFIG);
+        const isBrowser = typeof window !== 'undefined';
 
         for (let attempt = 1; attempt <= retries; attempt++) {
             try {
@@ -80,23 +81,44 @@ export class OpenRouterQueryManager {
                         setTimeout(() => reject(new Error(`NVIDIA request timed out after ${timeout}ms`)), timeout)
                     );
 
-                    const fetchPromise = fetch(endpoint, {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'Authorization': `Bearer ${apiKey}`
-                        },
-                        body: JSON.stringify({
-                            model: model,
-                            messages: [
-                                { role: 'system', content: systemPrompt },
-                                { role: 'user', content: prompt }
-                            ],
-                            temperature: 0.3,
-                            max_tokens: 2000,
-                            stream: false
-                        })
-                    });
+                    let fetchPromise: Promise<Response>;
+
+                    if (isBrowser) {
+                        // 🔒 Client-side: route through server proxy (keys stay server-side)
+                        fetchPromise = fetch('/api/ai/agent', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                provider: 'nvidia',
+                                model: model,
+                                messages: [
+                                    { role: 'system', content: systemPrompt },
+                                    { role: 'user', content: prompt }
+                                ],
+                                temperature: 0.3,
+                                max_tokens: 2000,
+                                stream: false
+                            })
+                        });
+                    } else {
+                        fetchPromise = fetch(endpoint, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Authorization': `Bearer ${apiKey}`
+                            },
+                            body: JSON.stringify({
+                                model: model,
+                                messages: [
+                                    { role: 'system', content: systemPrompt },
+                                    { role: 'user', content: prompt }
+                                ],
+                                temperature: 0.3,
+                                max_tokens: 2000,
+                                stream: false
+                            })
+                        });
+                    }
 
                     const response = await Promise.race([fetchPromise, timeoutPromise]);
 
@@ -147,6 +169,7 @@ export class OpenRouterQueryManager {
         const model = getModelForTask(taskType, taskModels);
         const systemPrompt = getSystemPrompt(taskType);
         const breaker = this.getBreaker(modelName);
+        const isBrowser = typeof window !== 'undefined';
 
         for (let attempt = 1; attempt <= retries; attempt++) {
             try {
@@ -155,23 +178,45 @@ export class OpenRouterQueryManager {
                         setTimeout(() => reject(new Error(`Request timed out after ${timeout}ms`)), timeout)
                     );
 
-                    const fetchPromise = fetch(endpoint, {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'Authorization': `Bearer ${apiKey || getEnv('VITE_AI_GATEWAY_KEY', 'arblok')}`
-                        },
-                        body: JSON.stringify({
-                            model: model,
-                            messages: [
-                                { role: 'system', content: systemPrompt },
-                                { role: 'user', content: prompt }
-                            ],
-                            temperature: 0.3,
-                            max_tokens: 2000,
-                            stream: false
-                        })
-                    });
+                    let fetchPromise: Promise<Response>;
+
+                    if (isBrowser) {
+                        // 🔒 Client-side: route through server proxy
+                        const provider = modelName === '9router' ? '9router' : 'openrouter';
+                        fetchPromise = fetch('/api/ai/agent', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                provider,
+                                model: model,
+                                messages: [
+                                    { role: 'system', content: systemPrompt },
+                                    { role: 'user', content: prompt }
+                                ],
+                                temperature: 0.3,
+                                max_tokens: 2000,
+                                stream: false
+                            })
+                        });
+                    } else {
+                        fetchPromise = fetch(endpoint, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Authorization': `Bearer ${apiKey || getEnv('VITE_AI_GATEWAY_KEY', 'arblok')}`
+                            },
+                            body: JSON.stringify({
+                                model: model,
+                                messages: [
+                                    { role: 'system', content: systemPrompt },
+                                    { role: 'user', content: prompt }
+                                ],
+                                temperature: 0.3,
+                                max_tokens: 2000,
+                                stream: false
+                            })
+                        });
+                    }
 
                     const response = await Promise.race([fetchPromise, timeoutPromise]);
 
@@ -213,6 +258,7 @@ export class OpenRouterQueryManager {
         const endpoint = getEnv('OPENROUTER_ENDPOINT', 'https://openrouter.ai/api/v1/chat/completions')!;
         const model = getEnv('OPENROUTER_MODEL', 'meta-llama/llama-3.1-8b-instruct:free')!;
         const breaker = this.getBreaker('openrouter_fallback');
+        const isBrowser = typeof window !== 'undefined';
 
         for (let attempt = 1; attempt <= retries; attempt++) {
             try {
@@ -221,23 +267,44 @@ export class OpenRouterQueryManager {
                         setTimeout(() => reject(new Error(`Request timed out after ${timeout}ms`)), timeout)
                     );
 
-                    const fetchPromise = fetch(endpoint, {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'Authorization': `Bearer ${apiKey}`
-                        },
-                        body: JSON.stringify({
-                            model: model,
-                            messages: [
-                                { role: 'system', content: getSystemPrompt('intelligence_report') },
-                                { role: 'user', content: prompt }
-                            ],
-                            temperature: 0.3,
-                            max_tokens: 2000,
-                            stream: false
-                        })
-                    });
+                    let fetchPromise: Promise<Response>;
+
+                    if (isBrowser) {
+                        // 🔒 Client-side: route through server proxy
+                        fetchPromise = fetch('/api/ai/agent', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                provider: 'openrouter',
+                                model,
+                                messages: [
+                                    { role: 'system', content: getSystemPrompt('intelligence_report') },
+                                    { role: 'user', content: prompt }
+                                ],
+                                temperature: 0.3,
+                                max_tokens: 2000,
+                                stream: false
+                            })
+                        });
+                    } else {
+                        fetchPromise = fetch(endpoint, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Authorization': `Bearer ${apiKey}`
+                            },
+                            body: JSON.stringify({
+                                model: model,
+                                messages: [
+                                    { role: 'system', content: getSystemPrompt('intelligence_report') },
+                                    { role: 'user', content: prompt }
+                                ],
+                                temperature: 0.3,
+                                max_tokens: 2000,
+                                stream: false
+                            })
+                        });
+                    }
 
                     const response = await Promise.race([fetchPromise, timeoutPromise]);
 

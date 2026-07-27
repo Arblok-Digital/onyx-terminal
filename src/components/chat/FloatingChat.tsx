@@ -240,10 +240,8 @@ function extractContent(msg: any): string | null {
 }
 
 function getAIConfig(): AIConfig | null {
-    const isVercel = typeof window !== 'undefined' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1';
-    
-    // 1) NVIDIA via proxy (works both local + Vercel — no CORS issues)
-    const proxyUrl = isVercel ? "/api/ai/chat" : "http://localhost:3001/api/ai/chat";
+    // 🔒 All AI calls go through server-side proxy — no keys exposed to client
+    const proxyUrl = "/api/ai/agent";
     return {
         url: proxyUrl,
         key: "proxy",
@@ -376,53 +374,38 @@ Kamu bisa bantu user berdasarkan pengetahuan umum crypto trading, tren market, d
         }
         return content;
     } catch (error) {
-        // If primary AI fails (connection refused, etc.), try fallback to OpenRouter
+        // If primary AI fails, try with the unified agent proxy specifying fallback provider
         console.error("[AI] Primary AI failed:", error);
 
-        // Get fallback config (OpenRouter)
-        const orUrl = import.meta.env.VITE_OPENROUTER_ENDPOINT as string | undefined;
-        const orKey = import.meta.env.VITE_OPENROUTER_API_KEY as string | undefined;
-        const orEnabled = import.meta.env.VITE_OPENROUTER_ENABLED as string | undefined;
+        try {
+            const response = await fetch(cfg.url, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    provider: "openrouter",
+                    model: "openai/gpt-3.5-turbo",
+                    messages,
+                    max_tokens: 1000,
+                    temperature: 0.4,
+                    stream: false,
+                }),
+            });
 
-        if (orUrl && orKey && !orKey.startsWith("#") && !orKey.startsWith(" ") && orEnabled === "true") {
-            console.log("[AI] Trying fallback to OpenRouter...");
-
-            try {
-                const response = await fetch(orUrl, {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json",
-                        Authorization: `Bearer ${orKey}`,
-                        "HTTP-Referer": "https://onyx-terminal.vercel.app",
-                        "X-Title": "Onyx Terminal"
-                    },
-                    body: JSON.stringify({
-                        model: "openai/gpt-3.5-turbo",
-                        messages,
-                        max_tokens: 1000,
-                        temperature: 0.4,
-                        stream: false,
-                    }),
-                });
-
-                if (!response.ok) {
-                    const errText = await response.text().catch(() => "Unknown error");
-                    throw new Error(`OpenRouter API error (${response.status}): ${errText.slice(0, 200)}`);
-                }
-
-                const result = await response.json();
-                const orContent = extractContent(result?.choices?.[0]?.message);
-                if (!orContent) {
-                    throw new Error("OpenRouter returned empty response");
-                }
-                return orContent;
-            } catch (fallbackError) {
-                console.error("[AI] OpenRouter fallback failed:", fallbackError);
-                throw new Error(`AI_FALLBACK_FAILED: ${fallbackError instanceof Error ? fallbackError.message : String(fallbackError)}`);
+            if (!response.ok) {
+                const errText = await response.text().catch(() => "Unknown error");
+                throw new Error(`AI fallback error (${response.status}): ${errText.slice(0, 200)}`);
             }
-        }
 
-        throw new Error(`AI_FAILED: ${error instanceof Error ? error.message : String(error)}`);
+            const result = await response.json();
+            const orContent = extractContent(result?.choices?.[0]?.message);
+            if (!orContent) {
+                throw new Error("AI fallback returned empty response");
+            }
+            return orContent;
+        } catch (fallbackError) {
+            console.error("[AI] Fallback AI failed:", fallbackError);
+            throw new Error(`AI_FALLBACK_FAILED: ${fallbackError instanceof Error ? fallbackError.message : String(fallbackError)}`);
+        }
     }
 }
 

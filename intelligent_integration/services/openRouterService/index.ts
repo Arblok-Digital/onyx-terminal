@@ -79,35 +79,37 @@ export class OpenRouterResearchManager {
             return defaultValue;
         };
 
-        // ── NVIDIA NIM (Primary AI Provider) ──
-        // Free tier: ~40 RPM, prototyping only. Production needs Enterprise license.
-        this.nvidiaKey = getEnv('VITE_NVIDIA_API_KEY', '');
-        const nvidiaEndpoint = getEnv('VITE_NVIDIA_ENDPOINT', 'https://integrate.api.nvidia.com/v1/chat/completions');
-        const hasNvidia = !!this.nvidiaKey;
+        // ── AI Proxies — all keys stay server-side via /api/ai/agent ──
+        // Client-side code routes through the proxy; key validation happens server-side.
+        const hasNvidia = !!getEnv('VITE_NVIDIA_API_KEY', '');
+        const routerUrl = getEnv('VITE_AI_GATEWAY_URL', 'http://localhost:20128/v1');
+        const has9Router = !!getEnv('VITE_AI_GATEWAY_KEY', 'arblok');
+        const hasOpenRouter = !!getEnv('VITE_OPENROUTER_API_KEY', '');
+        const isBrowser = typeof window !== 'undefined';
 
-        // ── 9Router Gateway (Secondary — fallback kalo NVIDIA rate-limited) ──
-        // Local gateway: localhost:20128/v1. Perlu VPS 24/7 untuk production.
-        const gatewayUrl = getEnv('VITE_AI_GATEWAY_URL', 'http://localhost:20128/v1');
-        this.gatewayKey = getEnv('VITE_AI_GATEWAY_KEY', 'arblok');
-        const has9Router = !!this.gatewayKey;
+        // NVIDIA NIM endpoint (client-side routes through proxy, or direct if server-side)
+        this.nvidiaKey = isBrowser ? 'proxy' : getEnv('VITE_NVIDIA_API_KEY', '');
+        const nvidiaEndpoint = isBrowser
+            ? '/api/ai/agent'
+            : getEnv('VITE_NVIDIA_ENDPOINT', 'https://integrate.api.nvidia.com/v1/chat/completions');
 
-        // ── OpenRouter (Last resort fallback — free models) ──
-        this.openRouterKey = getEnv('OPENROUTER_API_KEY', '');
+        // 9Router Gateway
+        this.gatewayKey = isBrowser ? 'proxy' : getEnv('VITE_AI_GATEWAY_KEY', 'arblok');
+
+        // OpenRouter
+        this.openRouterKey = isBrowser ? 'proxy' : getEnv('OPENROUTER_API_KEY', '');
 
         // NVIDIA NIM endpoint
-        this.endpoint = hasNvidia ? nvidiaEndpoint : '';
+        this.endpoint = hasNvidia || isBrowser ? nvidiaEndpoint : '';
 
-        // Fallback chain priority:
-        // 1. NVIDIA NIM (Nemotron 3 Ultra 550B — deep research, 40 RPM)
-        // 2. 9Router Gateway (local AI, unlimited, but butuh VPS)
-        // 3. OpenRouter (free models, rate limited)
+        // Fallback chain via proxy (always available in browser, keys checked server-side)
         this.endpoints = new Map([
-            ['nvidia', hasNvidia ? nvidiaEndpoint : ''],
-            ['9router', has9Router ? `${gatewayUrl}/chat/completions` : ''],
-            ['openrouter', this.openRouterKey ? 'https://openrouter.ai/api/v1/chat/completions' : ''],
+            ['nvidia', '/api/ai/agent'],
+            ['9router', '/api/ai/agent'],
+            ['openrouter', '/api/ai/agent'],
         ]);
 
-        // Set current model based on availability
+        // Set current model based on availability + proxy fallback
         this.currentModel = hasNvidia ? 'nvidia' : (has9Router ? '9router' : 'openrouter');
         this.taskModels = TASK_MODEL_MAP;
         this.parser = new ReportParser();
@@ -118,9 +120,10 @@ export class OpenRouterResearchManager {
 
         console.log('[OpenRouter AI] Initialized', {
             primary: this.currentModel,
-            nvidia: hasNvidia ? '✅ configured (40 RPM)' : '❌ not configured',
-            '9router': has9Router ? '✅ configured' : '❌ not configured',
-            openRouter: this.openRouterKey ? '✅ configured' : '❌ not configured',
+            nvidia: hasNvidia ? '✅ configured' : '❌ not configured (proxy fallback)',
+            '9router': has9Router ? '✅ configured' : '❌ not configured (proxy fallback)',
+            openRouter: hasOpenRouter ? '✅ configured' : '❌ not configured (proxy fallback)',
+            mode: isBrowser ? 'proxy' : 'direct',
         });
     }
 

@@ -56,6 +56,12 @@ dev-dist/
 test-ledger/
 .replit-artifact/
 
+# === RAPI-RAPI: Folder sampah dari dev ===
+docs/
+scripts/
+searxng-instance/
+github-copilot-9router-config/
+
 # Server / proxy files
 server.js
 jup-proxy.js
@@ -88,6 +94,9 @@ CHATBOT_REBUILD_PLAN.md
 
 # Misc
 supabase_setup.sql
+
+# === CRITICAL: File berisi API key plaintext (JANGAN PERNAH DI-COMMIT) ===
+ONYX_KEYS_BACKUP.md
 
 # === CLEANUP: Junk files from dev ===
 $null
