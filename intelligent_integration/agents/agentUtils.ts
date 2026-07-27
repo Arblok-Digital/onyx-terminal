@@ -2,11 +2,16 @@
  * @file agentUtils.ts
  * @layer agents
  * @desc Shared utilities for all agents.
- *       Removed broken imports (config/rpcConfig, services/tokenCache, services/agentStats).
- *       Now self-contained with safe number helpers and DexScreener data fetcher.
+ *       DexScreener data fetching now consolidated via:
+ *         Step 1: Check price.store (shared store, populated by feeds/dexscreener.ts)
+ *         Step 2: Fall back to feeds/dexscreener.ts (rate-limited via core/rate-limiter)
+ *       No more raw fetch() to DexScreener — single source of truth.
  *
  * @exposes safeNumber, safePercent, fetchDexScreenerData, DexScreenerData
  */
+
+import { usePriceStore } from '@/core/store/price.store';
+import type { TokenSnapshot } from '@/core/store/price.store';
 
 // ── Number Helpers (overflow-safe) ──────────────────────────────
 
@@ -81,9 +86,7 @@ export class SimpleCache<T> {
   }
 }
 
-// ── DexScreener Data Fetcher ────────────────────────────────────
-// DexScreener is free, no API key needed, 300 req/min limit.
-// Used by MarketAgent and FlowIntelligenceAgent for real market data.
+// ── DexScreener Data Types ──────────────────────────────────────
 
 export interface DexScreenerPair {
   chainId: string;
@@ -149,76 +152,89 @@ export interface DexScreenerData {
   websites: { label: string; url: string }[];
 }
 
+// ── Converter: TokenSnapshot → DexScreenerData ─────────────────
+// Allows agents to consume data from the shared price.store
+// without needing a separate raw fetch.
+
+function snapshotToDexScreenerData(snap: TokenSnapshot): DexScreenerData {
+  return {
+    symbol: snap.symbol,
+    name: snap.name,
+    priceUsd: snap.priceUsd ?? 0,
+    priceChange5m: snap.priceChange5m ?? 0,
+    priceChange1h: snap.priceChange1h ?? 0,
+    priceChange6h: snap.priceChange6h ?? 0,
+    priceChange24h: snap.priceChange24h ?? 0,
+    volume5m: snap.volume5m ?? 0,
+    volume1h: snap.volume1h ?? 0,
+    volume6h: snap.volume6h ?? 0,
+    volume24h: snap.volume24h ?? 0,
+    buys5m: snap.txns5m?.buys ?? 0,
+    sells5m: snap.txns5m?.sells ?? 0,
+    buys1h: snap.txns1h?.buys ?? 0,
+    sells1h: snap.txns1h?.sells ?? 0,
+    buys6h: snap.txns6h?.buys ?? 0,
+    sells6h: snap.txns6h?.sells ?? 0,
+    buys24h: snap.txns24h?.buys ?? 0,
+    sells24h: snap.txns24h?.sells ?? 0,
+    liquidityUsd: snap.liquidity ?? 0,
+    fdv: snap.fdv ?? 0,
+    marketCap: snap.marketCap ?? 0,
+    pairCreatedAt: snap.pairCreatedAt ?? null,
+    socials: (snap.links ?? [])
+      .filter(l => l.type === 'twitter' || l.type === 'telegram' || l.type === 'discord')
+      .map(l => ({ type: l.type, url: l.url })),
+    websites: (snap.links ?? [])
+      .filter(l => l.type === 'website')
+      .map(l => ({ label: l.label ?? 'website', url: l.url })),
+  };
+}
+
 /**
- * Fetch token data from DexScreener API (no key needed).
- * Picks the pair with highest liquidity.
+ * Fetch token data from DexScreener — CONSOLIDATED source.
+ *
+ * Step 1: Read from price.store (shared Zustand store, populated by
+ *         feeds/dexscreener.ts polling). If data exists and is <60s fresh,
+ *         return it directly — zero network requests.
+ *
+ * Step 2: Fall back to feeds/dexscreener.ts getTokensBatch() which is
+ *         rate-limited via core/rate-limiter.ts. This only happens for
+ *         tokens NOT currently on the user's watchlist.
+ *
+ * No raw fetch() to DexScreener — all network calls go through the
+ * rate-limited feed layer.
  */
 export async function fetchDexScreenerData(mint: string): Promise<DexScreenerData | null> {
+  const addr = mint.toLowerCase();
+
+  // ── Step 1: Try shared price.store first ──────────────────────
   try {
-    const url = `https://api.dexscreener.com/latest/dex/tokens/${mint}`;
-    const res = await fetch(url, {
-      headers: { accept: 'application/json' },
-      signal: AbortSignal.timeout(10_000),
-    });
-
-    if (!res.ok) {
-      console.warn(`[DexScreener] HTTP ${res.status} for ${mint}`);
-      return null;
+    const { tokens } = usePriceStore.getState();
+    const snap = tokens[addr];
+    if (snap && snap.updatedAt && Date.now() - snap.updatedAt < 60_000) {
+      // Data is fresh enough — convert directly, zero network cost
+      return snapshotToDexScreenerData(snap);
     }
-
-    const data = await res.json();
-    const pairs: DexScreenerPair[] = data.pairs ?? [];
-
-    if (pairs.length === 0) return null;
-
-    // Pick pair with highest liquidity
-    const best = pairs.reduce((best, p) => {
-      const pL = p.liquidity?.usd ?? 0;
-      const bL = best.liquidity?.usd ?? 0;
-      return pL > bL ? p : best;
-    });
-
-    const socials = (best.info?.socials ?? []).map((s) => ({
-      type: s.type || s.platform || 'unknown',
-      url: s.url || '',
-    })).filter((s) => s.url);
-
-    const websites = (best.info?.websites ?? []).map((w) => ({
-      label: w.label || 'website',
-      url: w.url || '',
-    })).filter((w) => w.url);
-
-    return {
-      symbol: best.baseToken.symbol,
-      name: best.baseToken.name,
-      priceUsd: safeNumber(best.priceUsd, 0),
-      priceChange5m: safeNumber(best.priceChange?.m5, 0),
-      priceChange1h: safeNumber(best.priceChange?.h1, 0),
-      priceChange6h: safeNumber(best.priceChange?.h6, 0),
-      priceChange24h: safeNumber(best.priceChange?.h24, 0),
-      volume5m: safeNumber(best.volume?.m5, 0),
-      volume1h: safeNumber(best.volume?.h1, 0),
-      volume6h: safeNumber(best.volume?.h6, 0),
-      volume24h: safeNumber(best.volume?.h24, 0),
-      buys5m: safeNumber(best.txns?.m5?.buys, 0),
-      sells5m: safeNumber(best.txns?.m5?.sells, 0),
-      buys1h: safeNumber(best.txns?.h1?.buys, 0),
-      sells1h: safeNumber(best.txns?.h1?.sells, 0),
-      buys6h: safeNumber(best.txns?.h6?.buys, 0),
-      sells6h: safeNumber(best.txns?.h6?.sells, 0),
-      buys24h: safeNumber(best.txns?.h24?.buys, 0),
-      sells24h: safeNumber(best.txns?.h24?.sells, 0),
-      liquidityUsd: safeNumber(best.liquidity?.usd, 0),
-      fdv: safeNumber(best.fdv, 0),
-      marketCap: safeNumber(best.marketCap ?? best.fdv, 0),
-      pairCreatedAt: best.pairCreatedAt ?? null,
-      socials,
-      websites,
-    };
-  } catch (error) {
-    console.warn('[DexScreener] fetch failed for', mint, error);
-    return null;
+  } catch {
+    // Store not accessible (e.g. SSR/test) — fall through
   }
+
+  // ── Step 2: Fall back to rate-limited feeds layer ─────────────
+  try {
+    const { getTokensBatch } = await import('@/feeds/dexscreener');
+    const snaps = await getTokensBatch([mint]);
+    if (snaps.length > 0) {
+      // Also upsert into store so next consumer finds it fresh
+      try {
+        usePriceStore.getState().upsertMany(snaps);
+      } catch { /* non-critical */ }
+      return snapshotToDexScreenerData(snaps[0]);
+    }
+  } catch (e) {
+    console.warn('[agentUtils] dexscreener.ts fallback failed:', e);
+  }
+
+  return null;
 }
 
 // ── Logger Helper ───────────────────────────────────────────────

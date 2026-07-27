@@ -207,6 +207,22 @@ export async function getLatestProfiles(): Promise<TokenProfile[]> {
     }));
 }
 
+/** Top token boosts from DexScreener — curated trending tokens. */
+export type TokenBoost = {
+  tokenAddress?: string;
+  url?: string;
+  chainId?: string;
+  icon?: string;
+  [key: string]: unknown;
+};
+
+export async function getTopBoosts(): Promise<TokenBoost[]> {
+  const url = `https://${HOST}/token-boosts/top/v1`;
+  const data = await scheduleRequest(HOST, () => fetchJson<TokenBoost[] | { boosts?: TokenBoost[] }>(url));
+  if (Array.isArray(data)) return data;
+  return data?.boosts ?? [];
+}
+
 /** Search by symbol or address (used by Cmd+K). Returns top 12 pairs. */
 export async function searchTokens(query: string): Promise<TokenSnapshot[]> {
   const q = query.trim();

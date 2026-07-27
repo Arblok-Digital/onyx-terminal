@@ -72,6 +72,7 @@ export class NarrativeAgent {
         confidence,
         evidence,
         narrativeStrength,
+        narrativeScore: narrativeStrength / 100, // 0-1 scale for consumer consistency
         relatedTokens,
       };
 
@@ -89,6 +90,7 @@ export class NarrativeAgent {
         confidence: 0.3,
         evidence: ['Analysis failed'],
         narrativeStrength: 30,
+        narrativeScore: 0.3,
         relatedTokens: [],
       };
     }

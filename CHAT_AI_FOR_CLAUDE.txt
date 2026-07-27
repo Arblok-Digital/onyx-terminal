@@ -38,10 +38,9 @@ function formatAnalysisReport(
 
     const riskScore = (onchainAnalysis?.riskScore ?? 0);
     const narrativeScore = (narrativeAnalysis?.narrativeScore ?? 0);
-    // These scores come from agents in 0-100 scale — normalize to 0-1 for consistent /1.0 display
-    const smartMoneyScore = ((smartMoneyAnalysis?.smartMoneyScore ?? 0) / 100);
-    const survivalScore = ((survivalAnalysis?.survivalScore ?? 0) / 100);
-    const opportunityScore = ((opportunityAnalysis?.opportunityScore ?? 0) / 100);
+    const smartMoneyScore = (smartMoneyAnalysis?.smartMoneyScore ?? 0);
+    const survivalScore = (survivalAnalysis?.survivalScore ?? 0);
+    const opportunityScore = (opportunityAnalysis?.opportunityScore ?? 0);
 
     const lines: string[] = [];
 
@@ -193,13 +192,13 @@ type Intent =
 /* ------------------------------------------------------------------ */
 
 const INTENT_KEYWORDS: Record<Intent, string[]> = {
-    rug: ["rug", "scam", "aman", "safe", "aman gak", "aman ga", "bahaya", "risk", "rugpull", "rug pull", "penipuan", "curang", "rakecek", "ragu", "waswas"],
-    whale: ["whale", "smart money", "smartmoney", "celana", "ikus", "ikus masuk", "whale masuk", "big buyer", "insider", "cerdas", "bandar", "paus"],
-    flow: ["flow", "momentum", "pump", "dump", "volume", "buy pressure", "sell pressure", "arus", "aliran", "mafia", "dca", "grafik", "chart", "signal", "sinyal"],
-    narrative: ["narrative", "story", "hype", "katalis", "news", "berita", "sosmed", "social", "trending", "cerita", "narasi", "viral", "rame"],
-    opportunity: ["opportunity", "early", "gem", "alpha", "potensi", "peluang", "untung", "moon", "opport", "cuan", "profit", "bagus"],
-    market: ["market", "price", "harga", "trend", "tren", "kapitalisasi", "marketcap", "mc", "fdv", "nilai", "kap"],
-    summary: ["analisis", "analysis", "analyze", "overview", "ringkasan", "summary", "laporan", "report", "gimana", "gimana nih", "kenapa", "bagaimana", "tampilkan", "analisa", "cek", "check", "lihat", "info", "inpo"],
+    rug: ["rug", "scam", "aman", "safe", "aman gak", "aman ga", "bahaya", "risk", "rugpull", "rug pull", "penipuan", "curang"],
+    whale: ["whale", "smart money", "smartmoney", "celana", "ikus", "ikus masuk", "whale masuk", "big buyer", "insider", "cerdas"],
+    flow: ["flow", "momentum", "pump", "dump", "volume", "buy pressure", "sell pressure", "arus", "aliran", "mafia", "dca"],
+    narrative: ["narrative", "story", "hype", "katalis", "news", "berita", "sosmed", "social", "trending", "cerita", "narasi"],
+    opportunity: ["opportunity", "early", "gem", "alpha", "potensi", "peluang", "untung", "moon", "opport"],
+    market: ["market", "price", "harga", "trend", "tren", "kapitalisasi", "marketcap", "mc", "fdv"],
+    summary: ["analisis", "analysis", "analyze", "overview", "ringkasan", "summary", "laporan", "report", "gimana", "gimana nih", "kenapa", "bagaimana", "tampilkan"],
     general: [],
 };
 
@@ -266,7 +265,7 @@ async function askAI(
 
     let dashboardContext = "";
     let hasLiveData = false;
-    if (tokenAddress && tokenAddress !== "N/A") {
+    if (tokenAddress && tokenAddress !== "N/A" && intent !== "general") {
         try {
             const ctx = await getDashboardContext(tokenAddress);
             if (ctx && ctx.length > 0) {
@@ -304,9 +303,7 @@ ${dashboardContext}
 
 📊 TOKEN: ${tokenSymbol} (${tokenAddress})
 
-⚠️ Data dashboard real-time belum ditemukan untuk token ini di DexScreener — ini bisa berarti likuiditasnya masih sangat baru/rendah, atau memang belum ter-index.
-Sebelum menyimpulkan apa pun soal validitas token, saranin user cek langsung di https://solscan.io/token/${tokenAddress} untuk konfirmasi token itu benar-benar exist on-chain.
-JANGAN membuat klaim soal format alamat Solana atau validitas teknis — kamu tidak punya data untuk itu.
+⚠️ Data dashboard real-time belum tersedia untuk token ini. Mungkin token belum aktif diperdagangkan di DexScreener atau address-nya kurang tepat.
 Kamu bisa bantu user berdasarkan pengetahuan umum crypto trading, tren market, dan analisis fundamental.
 
 🎯 Yang bisa kamu lakukan:
@@ -668,4 +665,594 @@ const FloatingChat: React.FC = () => {
     );
 };
 
-export default FloatingChat;
+export default FloatingChat;/**
+ * @file agent.js
+ * @desc Vercel serverless endpoint — unified AI proxy for intelligent_integration agents.
+ *       Supports NVIDIA NIM (primary), OpenRouter (fallback), and 9Router Gateway.
+ *       All API keys stay server-side.
+ * @endpoint POST /api/ai/agent
+ *
+ * Request body:
+ *   { provider: "nvidia"|"openrouter"|"9router", model, messages, ... }
+ */
+export default async function handler(req, res) {
+  const origin = req.headers.origin;
+  const ALLOWED_ORIGINS = [
+    'https://onyx-terminal.vercel.app',
+    'http://localhost:5173',
+    'http://localhost:3001',
+    'http://127.0.0.1:5173',
+    'http://127.0.0.1:3001',
+  ];
+  if (origin && ALLOWED_ORIGINS.includes(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+  }
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  if (req.method === 'OPTIONS') return res.status(200).end();
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+
+  try {
+    const { provider, ...body } = req.body;
+
+    let endpoint, apiKey;
+    switch (provider || 'nvidia') {
+      case 'nvidia':
+        endpoint = process.env.NVIDIA_API_KEY || process.env.VITE_NVIDIA_API_KEY
+          ? 'https://integrate.api.nvidia.com/v1/chat/completions'
+          : '';
+        apiKey = process.env.NVIDIA_API_KEY || process.env.VITE_NVIDIA_API_KEY || '';
+        break;
+      case 'openrouter':
+        endpoint = process.env.OPENROUTER_API_KEY || process.env.VITE_OPENROUTER_API_KEY
+          ? 'https://openrouter.ai/api/v1/chat/completions'
+          : '';
+        apiKey = process.env.OPENROUTER_API_KEY || process.env.VITE_OPENROUTER_API_KEY || '';
+        break;
+      case '9router':
+        endpoint = process.env.VITE_AI_GATEWAY_URL
+          ? `${process.env.VITE_AI_GATEWAY_URL}/chat/completions`
+          : 'http://localhost:20128/v1/chat/completions';
+        apiKey = process.env.VITE_AI_GATEWAY_KEY || 'arblok';
+        break;
+      default:
+        return res.status(400).json({ error: `Unknown provider: ${provider}` });
+    }
+
+    if (!endpoint) {
+      return res.status(400).json({ error: `${provider} provider not configured on server` });
+    }
+
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify(body),
+    });
+
+    const data = await response.json();
+    return res.status(response.status).json(data);
+  } catch (err) {
+    return res.status(500).json({ error: String(err) });
+  }
+}
+/**
+ * @file chat.js
+ * @desc Vercel serverless endpoint — proxies AI chat to NVIDIA NIM.
+ *       Works on Vercel (no CORS issues for server-to-server calls).
+ * @endpoint POST /api/ai/chat
+ */
+export default async function handler(req, res) {
+  // CORS — restrict to known origins
+  const origin = req.headers.origin;
+  const ALLOWED_ORIGINS = [
+    'https://onyx-terminal.vercel.app',
+    'http://localhost:5173',
+    'http://localhost:3001',
+    'http://127.0.0.1:5173',
+    'http://127.0.0.1:3001',
+  ];
+  if (origin && ALLOWED_ORIGINS.includes(origin)) {
+    res.setHeader("Access-Control-Allow-Origin", origin);
+  }
+  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+  if (req.method === "OPTIONS") return res.status(200).end();
+
+  if (req.method !== "POST") {
+    return res.status(405).json({ error: "Method not allowed" });
+  }
+
+  const nvidiaKey = process.env.VITE_NVIDIA_API_KEY || process.env.NVIDIA_API_KEY;
+  if (!nvidiaKey) {
+    return res.status(400).json({ error: "NVIDIA_API_KEY not configured" });
+  }
+
+  try {
+    const response = await fetch(
+      "https://integrate.api.nvidia.com/v1/chat/completions",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${nvidiaKey}`,
+        },
+        body: JSON.stringify(req.body),
+      }
+    );
+    const data = await response.json();
+    return res.status(response.status).json(data);
+  } catch (err) {
+    return res.status(500).json({ error: String(err) });
+  }
+}
+/**
+ * @file dashboardDataService.ts
+ * @layer service
+ * @desc Aggregates real-time dashboard data from multiple sources for AI chatbot context.
+ *       Combines DexScreener market data, price store snapshots, and AI Intelligence reports.
+ * @exposes DashboardDataService, getDashboardContext
+ */
+
+import { usePriceStore, TokenSnapshot } from "@/core/store/price.store";
+import { analyzeToken, IntelligenceReport, FlowAnalysis, OnchainAnalysis, MarketAnalysis } from "@intelligent_integration";
+
+/**
+ * Aggregated dashboard data for AI context
+ */
+export interface DashboardData {
+    // Token basic info
+    tokenAddress: string;
+    symbol: string;
+    name: string;
+    chain: string;
+
+    // Market data from DexScreener
+    marketData: {
+        priceUsd?: number;
+        priceChange24h?: number;
+        volume24h?: number;
+        liquidity?: number;
+        marketCap?: number;
+        fdv?: number;
+        txns24h?: {
+            buys?: number;
+            sells?: number;
+        };
+        pairCreatedAt?: number;
+    };
+
+    // Real-time price movements
+    priceMovements: {
+        change5m?: number;
+        change1h?: number;
+        change6h?: number;
+        change24h?: number;
+    };
+
+    // Volume analysis
+    volumeAnalysis: {
+        volume5m?: number;
+        volume1h?: number;
+        volume6h?: number;
+        volume24h?: number;
+    };
+
+    // Transaction analysis
+    txnAnalysis: {
+        txns5m?: { buys?: number; sells?: number };
+        txns1h?: { buys?: number; sells?: number };
+        txns6h?: { buys?: number; sells?: number };
+        txns24h?: { buys?: number; sells?: number };
+        buyPressure?: string; // "high" | "medium" | "low"
+    };
+
+    // AI Intelligence Report (if available)
+    intelligence?: {
+        recommendation?: string;
+        confidenceScore?: number;
+        executiveSummary?: string;
+        rugPullWarning?: string;
+        smartMoneyActivity?: string;
+        narrativeStrength?: string;
+        opportunityScore?: number;
+        keyInsights?: string[];
+    };
+    intelligenceError?: string; // New field for AI analysis errors
+
+    // Metadata
+    updatedAt: number;
+    dataAvailability: {
+        hasMarketData: boolean;
+        hasIntelligence: boolean;
+        hasPriceHistory: boolean;
+    };
+}
+
+/**
+ * Calculate buy pressure from transaction data
+ */
+function calculateBuyPressure(txns?: { buys?: number; sells?: number }): string {
+    if (!txns || !txns.buys || !txns.sells) return "unknown";
+    const total = txns.buys + txns.sells;
+    if (total === 0) return "no activity";
+    const buyRatio = txns.buys / total;
+    if (buyRatio > 0.65) return "high (bullish)";
+    if (buyRatio > 0.45) return "balanced";
+    return "low (bearish)";
+}
+
+/**
+ * Format percentage for display
+ */
+function formatPercent(value?: number): string {
+    if (value === undefined || value === null || isNaN(value)) return "N/A";
+    const pct = (value * 100).toFixed(2);
+    return value >= 0 ? `+${pct}%` : `${pct}%`;
+}
+
+/**
+ * Format large numbers (volume, market cap, etc.)
+ */
+function formatLargeNumber(value?: number): string {
+    if (value === undefined || value === null || isNaN(value)) return "N/A";
+    if (value >= 1e9) return `$${(value / 1e9).toFixed(2)}B`;
+    if (value >= 1e6) return `$${(value / 1e6).toFixed(2)}M`;
+    if (value >= 1e3) return `$${(value / 1e3).toFixed(2)}K`;
+    return `$${value.toFixed(2)}`;
+}
+
+/**
+ * Get real-time dashboard data for a token
+ */
+export async function getDashboardData(tokenAddress: string): Promise<DashboardData> {
+    const priceStore = usePriceStore.getState();
+    const snapshot = priceStore.tokens[tokenAddress.toLowerCase()];
+
+    const data: DashboardData = {
+        tokenAddress,
+        symbol: snapshot?.symbol || "UNKNOWN",
+        name: snapshot?.name || "Unknown Token",
+        chain: snapshot?.chain || "solana",
+
+        marketData: {
+            priceUsd: snapshot?.priceUsd,
+            priceChange24h: snapshot?.priceChange24h,
+            volume24h: snapshot?.volume24h,
+            liquidity: snapshot?.liquidity,
+            marketCap: snapshot?.marketCap,
+            fdv: snapshot?.fdv,
+            txns24h: snapshot?.txns24h,
+            pairCreatedAt: snapshot?.pairCreatedAt,
+        },
+
+        priceMovements: {
+            change5m: snapshot?.priceChange5m,
+            change1h: snapshot?.priceChange1h,
+            change6h: snapshot?.priceChange6h,
+            change24h: snapshot?.priceChange24h,
+        },
+
+        volumeAnalysis: {
+            volume5m: snapshot?.volume5m,
+            volume1h: snapshot?.volume1h,
+            volume6h: snapshot?.volume6h,
+            volume24h: snapshot?.volume24h,
+        },
+
+        txnAnalysis: {
+            txns5m: snapshot?.txns5m,
+            txns1h: snapshot?.txns1h,
+            txns6h: snapshot?.txns6h,
+            txns24h: snapshot?.txns24h,
+            buyPressure: calculateBuyPressure(snapshot?.txns24h),
+        },
+
+        updatedAt: snapshot?.updatedAt || Date.now(),
+        dataAvailability: {
+            hasMarketData: !!snapshot,
+            hasIntelligence: false,
+            hasPriceHistory: !!(snapshot?.priceChange5m || snapshot?.priceChange1h),
+        },
+    };
+
+    // Intelligence report is NOT fetched automatically.
+    // Call getDashboardDataWithIntelligence() explicitly when needed (e.g. from chatbot).
+
+    return data;
+}
+
+/**
+ * Format dashboard data as natural language context for AI
+ */
+export function formatDashboardContext(data: DashboardData): string {
+    const lines: string[] = [];
+
+    lines.push(`=== DATA DASHBOARD ONYX untuk ${data.symbol} ===`);
+    lines.push(`Token: ${data.name} (${data.symbol})`);
+    lines.push(`Address: ${data.tokenAddress}`);
+    lines.push(`Chain: ${data.chain.toUpperCase()}`);
+    lines.push(`Last Updated: ${new Date(data.updatedAt).toLocaleString("id-ID")}`);
+    lines.push("");
+
+    // Market Overview
+    if (data.dataAvailability.hasMarketData) {
+        lines.push("--- MARKET OVERVIEW ---");
+        lines.push(`Price: ${data.marketData.priceUsd ? `$${data.marketData.priceUsd.toFixed(8)}` : "N/A"}`);
+        lines.push(`24h Change: ${formatPercent(data.marketData.priceChange24h)}`);
+        lines.push(`Volume 24h: ${formatLargeNumber(data.marketData.volume24h)}`);
+        lines.push(`Liquidity: ${formatLargeNumber(data.marketData.liquidity)}`);
+        lines.push(`Market Cap: ${formatLargeNumber(data.marketData.marketCap)}`);
+        lines.push(`FDV: ${formatLargeNumber(data.marketData.fdv)}`);
+        if (data.marketData.pairCreatedAt) {
+            const age = Date.now() - data.marketData.pairCreatedAt;
+            const days = Math.floor(age / (1000 * 60 * 60 * 24));
+            lines.push(`Token Age: ${days} days old`);
+        }
+        lines.push("");
+    }
+
+    // Price Movements
+    if (data.dataAvailability.hasPriceHistory) {
+        lines.push("--- PRICE MOVEMENTS ---");
+        lines.push(`5 minutes: ${formatPercent(data.priceMovements.change5m)}`);
+        lines.push(`1 hour: ${formatPercent(data.priceMovements.change1h)}`);
+        lines.push(`6 hours: ${formatPercent(data.priceMovements.change6h)}`);
+        lines.push(`24 hours: ${formatPercent(data.priceMovements.change24h)}`);
+        lines.push("");
+    }
+
+    // Volume Analysis
+    lines.push("--- VOLUME ANALYSIS ---");
+    lines.push(`Volume 5m: ${formatLargeNumber(data.volumeAnalysis.volume5m)}`);
+    lines.push(`Volume 1h: ${formatLargeNumber(data.volumeAnalysis.volume1h)}`);
+    lines.push(`Volume 6h: ${formatLargeNumber(data.volumeAnalysis.volume6h)}`);
+    lines.push(`Volume 24h: ${formatLargeNumber(data.volumeAnalysis.volume24h)}`);
+    lines.push("");
+
+    // Transaction Analysis
+    lines.push("--- TRANSACTION ANALYSIS ---");
+    if (data.txnAnalysis.txns24h) {
+        lines.push(`Buys 24h: ${data.txnAnalysis.txns24h.buys || 0}`);
+        lines.push(`Sells 24h: ${data.txnAnalysis.txns24h.sells || 0}`);
+    }
+    lines.push(`Buy Pressure: ${data.txnAnalysis.buyPressure}`);
+    lines.push("");
+
+    // Intelligence Report
+    if (data.intelligenceError) {
+        lines.push("--- INTELLIGENCE REPORT ---");
+        lines.push(`Error: ${data.intelligenceError}`);
+        lines.push(`Recommendation: N/A`); // Set to N/A if error
+        lines.push(`Confidence Score: 0%`); // Set to 0% if error
+        lines.push("");
+    } else if (data.dataAvailability.hasIntelligence && data.intelligence) {
+        lines.push("--- INTELLIGENCE REPORT ---");
+        lines.push(`Recommendation: ${data.intelligence.recommendation || "N/A"}`);
+        lines.push(`Confidence Score: ${data.intelligence.confidenceScore ? (data.intelligence.confidenceScore * 100).toFixed(0) + "%" : "N/A"}`);
+
+        if (data.intelligence.executiveSummary) {
+            lines.push(`Executive Summary: ${data.intelligence.executiveSummary}`);
+        }
+
+        if (data.intelligence.rugPullWarning) {
+            lines.push(`⚠️ Rug Pull Warning Level: ${data.intelligence.rugPullWarning}`);
+        }
+
+        if (data.intelligence.smartMoneyActivity) {
+            lines.push(`Smart Money Activity: ${data.intelligence.smartMoneyActivity}`);
+        }
+
+        if (data.intelligence.narrativeStrength) {
+            lines.push(`Narrative Strength: ${data.intelligence.narrativeStrength}`);
+        }
+
+        if (data.intelligence.opportunityScore) {
+            lines.push(`Opportunity Score: ${(data.intelligence.opportunityScore * 100).toFixed(0)}%`);
+        }
+
+        if (data.intelligence.keyInsights && data.intelligence.keyInsights.length > 0) {
+            lines.push("");
+            lines.push("Key Insights:");
+            data.intelligence.keyInsights.forEach(insight => {
+                lines.push(`• ${insight}`);
+            });
+        }
+        lines.push("");
+    }
+
+    lines.push("=== END OF DASHBOARD DATA ===");
+
+    return lines.join("\n");
+}
+
+/**
+ * Get dashboard data INCLUDING on-demand AI Intelligence analysis.
+ * This is the function to call explicitly from chatbot or user requests.
+ */
+export async function getDashboardDataWithIntelligence(tokenAddress: string): Promise<DashboardData> {
+    const data = await getDashboardData(tokenAddress);
+
+    try {
+        const report = await analyzeToken(tokenAddress);
+        data.intelligence = {
+            recommendation: report.recommendation,
+            confidenceScore: report.confidenceScore,
+            executiveSummary: report.executiveSummary,
+            rugPullWarning: report.intelligenceRanking?.rating === 'AVOID' ? 'high' : 'low',
+            smartMoneyActivity: report.smartMoneyAnalysis ? 'active' : 'inactive',
+            narrativeStrength: report.narrativeAnalysis?.narrativeStrength?.toString() ?? '0',
+            opportunityScore: report.intelligenceRanking?.opportunityScore || 0,
+            keyInsights: report.keyInsights?.slice(0, 5).map((ki: any) =>
+                `[${ki.category || 'general'}] ${ki.insight} (${Math.round(ki.confidence * 100)}%)`
+            ) || [],
+        };
+        data.dataAvailability.hasIntelligence = true;
+    } catch (error: any) {
+        console.warn("[DashboardData] Failed to fetch intelligence report:", error);
+        data.intelligenceError = error.message || "Unknown AI analysis error";
+    }
+
+    return data;
+}
+
+/**
+ * Get formatted dashboard context ready for AI
+ */
+export async function getDashboardContext(tokenAddress: string): Promise<string> {
+    try {
+        const data = await getDashboardData(tokenAddress);
+        // Only return context if we actually have market data
+        if (!data.dataAvailability.hasMarketData) {
+            return "";
+        }
+        return formatDashboardContext(data);
+    } catch (error) {
+        console.error("[DashboardContext] Failed to get dashboard context:", error);
+        return "";
+    }
+}
+
+/**
+ * Singleton service for managing dashboard data subscriptions
+ */
+export class DashboardDataService {
+    private static instance: DashboardDataService;
+    private subscribers: Map<string, Set<(data: DashboardData) => void>> = new Map();
+
+    private constructor() { }
+
+    static getInstance(): DashboardDataService {
+        if (!DashboardDataService.instance) {
+            DashboardDataService.instance = new DashboardDataService();
+        }
+        return DashboardDataService.instance;
+    }
+
+    /**
+     * Subscribe to real-time updates for a token
+     */
+    subscribe(tokenAddress: string, callback: (data: DashboardData) => void): () => void {
+        const key = tokenAddress.toLowerCase();
+        if (!this.subscribers.has(key)) {
+            this.subscribers.set(key, new Set());
+        }
+        this.subscribers.get(key)!.add(callback);
+
+        // Return unsubscribe function
+        return () => {
+            const subs = this.subscribers.get(key);
+            if (subs) {
+                subs.delete(callback);
+                if (subs.size === 0) {
+                    this.subscribers.delete(key);
+                }
+            }
+        };
+    }
+
+    /**
+     * Notify all subscribers of data updates
+     */
+    async notifySubscribers(tokenAddress: string): Promise<void> {
+        const key = tokenAddress.toLowerCase();
+        const subs = this.subscribers.get(key);
+        if (!subs || subs.size === 0) return;
+
+        try {
+            const data = await getDashboardData(tokenAddress);
+            subs.forEach(callback => callback(data));
+        } catch (error) {
+            console.error("[DashboardDataService] Failed to notify subscribers:", error);
+        }
+    }
+}/**
+ * @file systemPrompts.ts
+ * @layer service
+ * @desc System prompts for each AI task type
+ * @exposes getSystemPrompt
+ */
+
+/**
+ * Get the system prompt for a given task type
+ * Each task has a specialized system prompt tailored to its requirements
+ */
+export function getSystemPrompt(taskType: string): string {
+    switch (taskType) {
+        case 'intelligence_report':
+            return `You are a senior crypto intelligence analyst specializing in newborn token analysis.
+Your task is to generate comprehensive intelligence reports from multiple data sources.
+Focus on strategic insights, pattern detection, and early discovery signals.
+Provide actionable intelligence with confidence scores for each insight.`;
+
+        case 'pattern_detection':
+            return `You are an AI pattern recognition specialist for crypto tokens.
+Your task is to detect patterns, anomalies, and early signals in token behavior.
+Focus on identifying rug pull patterns, accumulation/distribution patterns, and market manipulation signals.
+Provide confidence scores for each detected pattern.`;
+
+        case 'risk_assessment':
+            return `You are a risk assessment specialist for crypto tokens.
+Your task is to evaluate various risk factors including rug pull potential, liquidity risks, and regulatory risks.
+Provide quantitative risk scores and qualitative assessments.`;
+
+        case 'flow_analysis':
+            return `You are a real-time data flow analyst for crypto tokens.
+Your task is to analyze trading patterns, volume spikes, and liquidity changes.
+Focus on identifying early signals of market activity, buy/sell pressure, and whale movements.
+Provide insights with confidence scores.`;
+
+        case 'market_analysis':
+            return `You are a market analyst for crypto tokens.
+Your task is to analyze market data, sentiment, and trading patterns.
+Provide insights on market trends, liquidity, volatility, and price movements.
+Include confidence scores for your assessments.`;
+
+        case 'onchain_analysis':
+            return `You are an onchain data analyst for crypto tokens.
+Your task is to analyze blockchain data including transactions, wallet activity, and smart contract interactions.
+Focus on identifying whale activity, token distribution, potential manipulation, and rug pull indicators.
+Provide quantitative metrics and confidence scores.`;
+
+        case 'narrative_analysis':
+            return `You are a narrative and sentiment analyst for crypto tokens.
+Your task is to analyze social media, community sentiment, and narrative development.
+Provide insights on narrative strength, sentiment trends, community engagement, and potential hype cycles.
+Include sentiment scores and narrative classification.`;
+
+        case 'smart_money_analysis':
+            return `You are a smart money analyst for crypto tokens.
+Your task is to track and analyze whale activity, institutional movements, and smart money patterns.
+Provide insights on accumulation/distribution by large holders, win rates, and conviction levels.
+Include quantitative metrics and confidence scores.`;
+
+        case 'survival_analysis':
+            return `You are a survival probability analyst for crypto tokens.
+Your task is to predict the likelihood of a token's long-term survival based on multiple factors.
+Provide quantitative survival probability scores, estimated lifespan, and key risk factors.
+Include confidence levels for your predictions.`;
+
+        default:
+            return `You are a helpful AI assistant specializing in crypto token analysis.
+Provide comprehensive and strategic insights based on the provided data.`;
+    }
+}
+
+/**
+ * All available task types
+ */
+export const TASK_TYPES = [
+    'intelligence_report',
+    'pattern_detection',
+    'risk_assessment',
+    'flow_analysis',
+    'market_analysis',
+    'onchain_analysis',
+    'narrative_analysis',
+    'smart_money_analysis',
+    'survival_analysis'
+] as const;
+
+export type TaskType = typeof TASK_TYPES[number];

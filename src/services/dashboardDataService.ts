@@ -310,10 +310,12 @@ export async function getDashboardDataWithIntelligence(tokenAddress: string): Pr
 
 /**
  * Get formatted dashboard context ready for AI
+ * Uses getDashboardDataWithIntelligence() — includes AI intelligence report
+ * alongside real-time price/market data, so the AI chat has the full picture.
  */
 export async function getDashboardContext(tokenAddress: string): Promise<string> {
     try {
-        const data = await getDashboardData(tokenAddress);
+        const data = await getDashboardDataWithIntelligence(tokenAddress);
         // Only return context if we actually have market data
         if (!data.dataAvailability.hasMarketData) {
             return "";

@@ -12,7 +12,7 @@
  */
 import { useEffect, useMemo, useState, useRef } from "react";
 import Panel from "@/ui/Panel";
-import { getLatestProfiles, getTokensBatch } from "@/feeds/dexscreener";
+import { getLatestProfiles, getTokensBatch, getTopBoosts } from "@/feeds/dexscreener";
 import { ShimmerInfo } from "@/components/ui/shimmer";
 import ShareButton from "@/components/ShareButton";
 import type { TokenProfile } from "@/feeds/dexscreener";
@@ -77,13 +77,13 @@ export default function Discover() {
         // 1. Fetch semua sumber secara PARALEL
         const [list, trending, geckoData] = await Promise.all([
           getLatestProfiles().catch(() => []),
-          fetch("https://api.dexscreener.com/token-boosts/top/v1").then(res => res.json()).catch(() => []),
+          getTopBoosts().catch(() => []),
           (tab === 'signals' || tab === 'trending') ? fetchGeckoTerminalPools() : Promise.resolve([])
         ]);
 
         if (stopped) return;
 
-        const trendingArr = Array.isArray(trending) ? trending : (trending?.boosts || []);
+        const trendingArr = trending;
         
         // Hanya update state jika data berhasil ditarik (mencegah list kosong mendadak)
         if (list.length > 0) setProfiles(list.slice(0, MAX_ROWS));

@@ -55,10 +55,12 @@
 .bubbleUser {
   align-self: flex-end; background: #3d3680;
   color: #e8e8f0; border: 1px solid #7c6df0;
+  user-select: text;
 }
 .bubbleSystem {
   align-self: flex-start; background: #1a1a1e;
   color: #8888a0; border: 1px solid #2a2a30;
+  user-select: text;
 }
 .loading {
   display: flex; align-items: center; gap: 6px; padding: 8px 10px;
